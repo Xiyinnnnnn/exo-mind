@@ -3,6 +3,7 @@
 [🇨🇳 中文](#chinese) | [🇬🇧 English](#english)
 
 ---
+https://xiyinnnnnn.github.io/exo-mind/index.html
 
 <a id="chinese"></a>
 
