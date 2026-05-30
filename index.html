@@ -56,7 +56,7 @@ body{
 .toolbar-right button:hover{background:#e9ecef;color:var(--color-text)}
 .toolbar-right button svg{width:20px;height:20px}
 /* ===== 聊天区 ===== */
-.chat-container{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.chat-container{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
 .messages-list{
   flex:1;overflow-y:auto;padding:16px;scroll-behavior:smooth;
   display:flex;flex-direction:column;gap:16px;
@@ -68,6 +68,7 @@ body{
 .message{
   display:flex;flex-direction:column;max-width:85%;
   animation:messageSlideIn .3s ease-out;
+  position:relative;overflow:visible;
 }
 @keyframes messageSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .message.user{align-self:flex-end}
@@ -82,29 +83,71 @@ body{
 .message.agent .message-timestamp{text-align:left}
 .message.user .message-timestamp{text-align:right}
 
-/* 删除按钮 */
-.msg-delete-btn {
+/* 消息操作按钮组 */
+.message { position: relative; }
+.msg-actions {
   position: absolute;
-  bottom: 6px; right: 6px;
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  background: rgba(231,76,60,0.12);
-  border: 1px solid rgba(231,76,60,0.25);
-  color: var(--color-danger);
-  font-size: 11px;
-  cursor: pointer;
+  bottom: -38px; right: -6px;
   display: none;
-  align-items: center; justify-content: center;
-  line-height: 1;
-  transition: opacity 0.15s, transform 0.15s;
+  gap: 2px;
   z-index: 10;
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  box-shadow: var(--shadow-sm);
 }
-.message-content { position: relative; }
-.message-content:hover .msg-delete-btn { display: flex; }
-.msg-delete-btn:hover {
-  background: rgba(231,76,60,0.25);
-  transform: scale(1.15);
+.message:hover .msg-actions,
+.message.user:hover .msg-actions,
+.message.agent:hover .msg-actions { display: flex; }
+.msg-action-btn {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center; justify-content: center;
+  color: var(--color-text-secondary);
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+  line-height: 1;
 }
+.msg-action-btn:hover { transform: scale(1.12); }
+.msg-action-btn.act-edit:hover { background: #e8f0fe; color: var(--color-primary); }
+.msg-action-btn.act-regen:hover { background: #e8f5e9; color: #2e7d32; }
+.msg-action-btn.act-continue:hover { background: #fff3e0; color: #e65100; }
+.msg-action-btn.act-delete:hover { background: #fde8e8; color: var(--color-danger); }
+.msg-action-btn.act-copy:hover { background: #e8f0fe; color: var(--color-primary); }
+
+/* 代码块复制按钮 — 与功能气泡复制按钮同款简约圆形 */
+.code-copy-btn {
+  position: absolute; top: 4px; right: 4px; z-index: 5;
+  width: 26px; height: 26px; border-radius: 50%;
+  border: none; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-secondary);
+  opacity: 0; transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.code-copy-btn:hover { background: #e8f0fe; color: var(--color-primary); }
+
+/* 气泡级分支导航 */
+.bubble-branch-nav {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 4px; padding: 2px 6px;
+  font-size: 11px; color: var(--color-text-secondary);
+  user-select: none;
+}
+.bubble-branch-nav button {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--color-border); background: var(--color-surface);
+  cursor: pointer; font-size: 12px; color: var(--color-text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.bubble-branch-nav button:hover { background: #e9ecef; }
+.bubble-branch-nav button:disabled { opacity: 0.35; cursor: default; }
+.bubble-branch-nav .branch-label { min-width: 40px; text-align: center; }
+.bubble-branch-nav .branch-del { color: var(--color-danger); border-color: rgba(231,76,60,0.3); }
 /* Markdown */
 .message-content h1,.message-content h2,.message-content h3{margin:8px 0 4px;font-weight:600}
 .message-content p{margin:4px 0}
@@ -575,8 +618,7 @@ button,label,[role="button"],.file-upload-btn{
       <p style="margin-top:12px;font-size:13px;">💡 我可以：搜索信息 · 执行代码 · 生成图表 · 处理文件 · 自我改进</p>
     </div>
   </div>
-  <div class="input-area" id="inputArea">
-    <div class="input-wrapper">
+  <div class="input-area" id="inputArea">    <div class="input-wrapper">
       <textarea id="userInput" placeholder="输入消息... (Enter发送, Shift+Enter换行)" rows="1" aria-label="消息输入框" disabled></textarea>
       <button class="mic-btn" id="btnMic" title="语音输入(按住说话)" aria-label="语音输入" type="button">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
@@ -590,7 +632,27 @@ button,label,[role="button"],.file-upload-btn{
       </button>
     </div>
   </div>
+  <!-- 滚动回底按钮 -->
+  <button id="scrollToBottomBtn" title="回到底部" aria-label="回到底部" style="display:none;position:absolute;right:16px;bottom:80px;width:40px;height:40px;border-radius:50%;background:var(--color-surface);border:1px solid var(--color-border);box-shadow:var(--shadow-md);cursor:pointer;z-index:50;align-items:center;justify-content:center;color:var(--color-text-secondary);transition:opacity 0.2s,transform 0.2s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
 </main>
+
+<!-- 编辑消息模态框 -->
+<div id="editMessageModal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.4);flex-direction:column;justify-content:flex-end">
+  <div style="background:var(--color-surface);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:16px;max-height:70vh;display:flex;flex-direction:column;gap:12px;animation:slideUp 0.25s ease-out">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-weight:600;font-size:16px">✏️ 编辑消息</span>
+      <button id="btnEditModalClose" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--color-text-secondary);line-height:1">×</button>
+    </div>
+    <textarea id="editMessageTextarea" style="width:100%;min-height:120px;max-height:40vh;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:12px;font-size:15px;font-family:inherit;resize:vertical;outline:none" placeholder="编辑消息内容..."></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="btnEditSave" class="btn btn-outline" style="padding:10px 20px">💾 保存</button>
+      <button id="btnEditSaveSend" class="btn btn-primary" style="padding:10px 20px">🚀 保存并发送</button>
+    </div>
+  </div>
+</div>
+<style>
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+</style>
 
 <!-- ===== 设置面板 ===== -->
 <aside class="settings-drawer" id="settingsDrawer" aria-hidden="true">
@@ -1085,8 +1147,8 @@ async function toolSemanticMemory(args){
 var TOOL_REGISTRY={
   'search':{name:'search',description:'搜索网络信息+爬取页面原文（需Tavily API Key）。返回标题、URL、摘要、可选原文',executor:'task_worker',
     parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词'},max_results:{type:'number',default:5,maximum:10,description:'返回结果数，默认5，最多10'},search_depth:{type:'string',enum:['basic','advanced'],default:'advanced',description:'basic快速 / advanced深度'},include_raw_content:{type:'boolean',default:false,description:'★ 是否抓取页面原文(Tavily直接返回，无需额外请求)。用于爬取/数据采集场景'},include_domains:{type:'array',items:{type:'string'},description:'限定域名白名单，如[\"github.com\"]'},exclude_domains:{type:'array',items:{type:'string'},description:'排除域名黑名单'}},required:['query']}},
-  'filesystem':{name:'filesystem',description:'虚拟文件系统。📂list/tree=树状目录 📖read=自动(≤64KB全量,>64KB分块) 🏷️rename=重命名 ♻️delete(safe)=回收站 🗑️delete(safe=false)=永久删除 ✏️create/update/append/insert/delete_lines/replace_lines=精确编辑 ⚡code_run=执行.js/.py',executor:'main_thread',
-    parameters:{type:'object',properties:{action:{type:'string',enum:['create','read','update','delete','list','tree','append','insert','delete_lines','replace_lines','code_run','rename']},path:{type:'string',description:'文件路径'},content:{type:'string',description:'文件内容。用于 create/update/append/insert/replace_lines'},line:{type:'number',description:'行号(1-based)。read=起始行；insert=插入到此行之前；delete_lines/replace_lines=起始行'},endLine:{type:'number',description:'结束行号(含)，默认0=末尾。read=读到此处；delete_lines/replace_lines=删除/替换范围终点'},maxLines:{type:'number',default:1000,maximum:1000,description:'read时单次最多返回行数'},mode:{type:'string',enum:['auto','chunked','full'],default:'auto',description:'read模式: auto(默认,≤64KB自动全量>64KB自动分块) / chunked(按行分块) / full(强制全量)'},full_max_bytes:{type:'number',default:65536,description:'auto/full模式安全阈值(字节)，默认64KB'},new_name:{type:'string',description:'rename的新文件名(不含路径)'},overwrite:{type:'boolean',default:false,description:'rename遇到同名是否覆盖'},safe:{type:'boolean',default:true,description:'delete时true=回收站 false=永久删除'},depth:{type:'number',description:'list/tree递归深度，0=不限制'},timeout:{type:'number',description:'code_run超时毫秒，默认10000'}},required:['action','path']}},
+  'filesystem':{name:'filesystem',description:'统一虚拟文件系统(含用户上传)。📂list/tree=树状目录 📖read=自动(≤64KB全量,>64KB分块) 🏷️rename=重命名 ♻️delete(safe)=回收站 🗑️delete(safe=false)=永久删除 ✏️create/update/append/insert/delete_lines/replace_lines=精确编辑 ⚡code_run=执行.js/.py。📁用户上传文件在/uploads/目录,如 filesystem read /uploads/report.pdf、filesystem list /uploads/。⚠️⚠️⚠️【铁律】同一文件连续多次replace_lines/delete_lines/insert必须按行号从大到小排序执行！每次操作后行号全局偏移，从底向上才能杜绝错位和重复。禁止不排序连续多次行操作。',executor:'main_thread',
+    parameters:{type:'object',properties:{action:{type:'string',enum:['create','read','update','delete','list','tree','append','insert','delete_lines','replace_lines','code_run','rename']},path:{type:'string',description:'文件路径。用户上传文件在/uploads/目录(如/uploads/report.pdf),用法与普通路径完全一致。'},content:{type:'string',description:'文件内容。用于 create/update/append/insert/replace_lines。⚠️replace_lines/insert的content按\\n拆分为多行逐一插入/替换，单行文本直接写字符串即可。'},line:{type:'number',description:'行号(1-based)。read=起始行；insert=插入到此行之前；delete_lines/replace_lines=起始行。⚠️⚠️⚠️【铁律】同一文件连续多次行操作(line/endLine)必须按行号从大到小排序后逐个执行！先执行大行号再执行小行号。否则前一次操作导致的行号偏移会让后续所有行号错位。禁止不经排序连续多次行操作。'},endLine:{type:'number',description:'结束行号(含)，默认0=末尾。read=读到此处；delete_lines/replace_lines=删除/替换范围终点。⚠️同理必须从大到小排序。'},maxLines:{type:'number',default:1000,maximum:1000,description:'read时单次最多返回行数'},mode:{type:'string',enum:['auto','chunked','full'],default:'auto',description:'read模式: auto(默认,≤64KB自动全量>64KB自动分块) / chunked(按行分块) / full(强制全量)'},full_max_bytes:{type:'number',default:65536,description:'auto/full模式安全阈值(字节)，默认64KB'},new_name:{type:'string',description:'rename的新文件名(不含路径)'},overwrite:{type:'boolean',default:false,description:'rename遇到同名是否覆盖'},safe:{type:'boolean',default:true,description:'delete时true=回收站 false=永久删除'},depth:{type:'number',description:'list/tree递归深度，0=不限制'},timeout:{type:'number',description:'code_run超时毫秒，默认10000'}},required:['action','path']}},
   'calculator':{name:'calculator',description:'计算数学表达式。支持四则运算、三角函数、对数、幂运算等',executor:'main_thread',
     parameters:{type:'object',properties:{expression:{type:'string',description:'数学表达式字符串，如 "sin(pi/4)+sqrt(16)*3" 或 "2^10-5*3"'}},required:['expression']}},
   'chart':{name:'chart',description:'根据数据生成ECharts图表(11种类型)。bar=柱状 line=折线 area=面积 pie=饼 scatter=散点 radar=雷达 funnel=漏斗 gauge=仪表 heatmap=热力 treemap=矩形树 sankey=桑基。页面内渲染展示',executor:'main_thread',
@@ -1095,8 +1157,6 @@ var TOOL_REGISTRY={
     parameters:{type:'object',properties:{diagram_type:{type:'string',enum:['flowchart','sequence','state','class','gantt','pie'],description:'图类型，必须匹配code内容。flowchart→graph TD/LR、sequence→sequenceDiagram、state→stateDiagram-v2、class→classDiagram、gantt→gantt、pie→pie'},code:{type:'string',description:'完整Mermaid语法代码。flowchart示例: graph TD; A[开始]-->B[处理]; B-->C[结束]'}},required:['code']}},
   'svg_animator':{name:'svg_animator',description:'生成SVG动画。★3种模式: css=系统自动加@keyframes淡入(适合简单展示,只需传静态SVG) smil=用户写<animate>标签自定义动画(完全可控) js=系统注入JS驱动(适合逐帧/物理模拟)。不要自己写<style>/<script>,系统自动包裹',executor:'main_thread',
     parameters:{type:'object',properties:{svg_code:{type:'string',description:'完整SVG(含<svg>标签)。css=传静态SVG即可; smil=元素内加<animate>; js=系统自动注入动画'},animation_type:{type:'string',enum:['css','smil','js'],default:'css',description:'css=自动淡入(默认) smil=手写<animate>自定义 js=系统JS驱动'},duration:{type:'number',default:2000,description:'动画持续毫秒，默认2000'}},required:['svg_code']}},
-  'file_upload':{name:'file_upload',description:'管理用户上传的文件(路径前缀 /uploads/)。create=新建文件 delete=删除 read=按行读取 append/insert=追加/插入行 update=覆盖 replace_lines/delete_lines=按行范围替换/删除。⚠️统一路径: file_upload操作/uploads/目录,filesystem操作全虚拟文件系统',executor:'main_thread',
-    parameters:{type:'object',properties:{action:{type:'string',enum:['list','read','create','delete','append','update','insert','delete_lines','replace_lines']},filename:{type:'string'},content:{type:'string',description:'文件内容。用于 create/update/append/insert/replace_lines'},line:{type:'number',description:'行号(1-based)。read=起始行；insert=插入到此行之前；delete_lines/replace_lines=起始行'},endLine:{type:'number',description:'结束行号(含)，默认0=末尾。read=读到此处；delete_lines/replace_lines=删除/替换范围终点'},maxLines:{type:'number',default:1000,maximum:1000,description:'read 单次最多返回行数'}},required:['action','filename']}},
   'table_generator':{name:'table_generator',description:'生成表格并展示在页面/可下载为csv或xlsx。headers为表头字符串数组，rows为二维数据数组，download_format可选csv或xlsx',executor:'main_thread',
     parameters:{type:'object',properties:{headers:{type:'array',items:{type:'string'},description:'表头列名数组'},rows:{type:'array',items:{type:'array',items:{type:'string'}},description:'数据行，每行为字符串数组'},download_format:{type:'string',enum:['csv','xlsx',null],description:'下载格式：csv(小文件通用)、xlsx(大文件/需Excel原生格式)、null(仅展示不下载)'}},required:['headers','rows']}},
   'word_generator':{name:'word_generator',description:'生成Word文档(.docx)并自动触发下载。content使用Markdown格式：##标题、###副标题、正文段落用空行分隔',executor:'main_thread',
@@ -1116,7 +1176,7 @@ var TOOL_REGISTRY={
   'skill_manager':{name:'skill_manager',description:'管理技能库。list=列出全部技能及触发条件(名称/ID/触发词/分类/来源/激活状态)；set=激活指定技能将其prompt_fragment注入你的系统指令(需传id)；reset=卸载所有激活技能恢复空白状态。未激活的技能不会影响你的行为。',executor:'main_thread',
     parameters:{type:'object',properties:{action:{type:'string',enum:['list','set','reset'],description:'list=查看全部技能, set=激活指定技能, reset=卸载全部'},id:{type:'string',description:'技能ID(action=set时必填)，从list结果[ID: xxx]获取'}},required:['action']}},
   'pdf_read':{name:'pdf_read',description:'读取PDF文件提取文本。支持 /uploads/ (上传) 和 /downloads/ (pdf_generate生成) 两个目录。text=纯文本 structured=JSON分页 metadata=仅元信息',executor:'main_thread',
-    parameters:{type:'object',properties:{filename:{type:'string',description:'PDF文件名(先用file_upload上传)'},mode:{type:'string',enum:['text','structured','metadata'],default:'text'},pages:{type:'string',description:'页码范围如"1-5"或"1,3",不填=全部'},maxPages:{type:'number',default:50}},required:['filename']}},
+    parameters:{type:'object',properties:{filename:{type:'string',description:'PDF文件名。上传的PDF在/uploads/目录(如/uploads/doc.pdf),也可读取/downloads/目录下pdf_generate生成的PDF。'},mode:{type:'string',enum:['text','structured','metadata'],default:'text'},pages:{type:'string',description:'页码范围如"1-5"或"1,3",不填=全部'},maxPages:{type:'number',default:50}},required:['filename']}},
   'pdf_generate':{name:'pdf_generate',description:'生成PDF(Markdown→html2pdf.js)。★GFM兼容:支持#标题/表格/任务列表/代码块(highlight.js高亮)。中文正常渲染。输出到/downloads/xxx.pdf',executor:'main_thread',
     parameters:{type:'object',properties:{content:{type:'string',description:'Markdown(GFM)或HTML内容'},format:{type:'string',enum:['markdown','html'],default:'markdown'},title:{type:'string',description:'文档标题'},filename:{type:'string',default:'document'},pageSize:{type:'string',enum:['A4','Letter','A3'],default:'A4'}},required:['content']}},
   'custom_api_call':{name:'custom_api_call',description:'调用HTTP API。endpoint支持{{VAR}}模板。body可传string或object(JSON时自动序列化,form时object自动编码)。⚠️与user_function_call区别: 这个走HTTP网络请求,user_function_call在浏览器内执行JS',executor:'main_thread',
@@ -1135,7 +1195,7 @@ var TOOL_REGISTRY={
     parameters:{type:'object',properties:{},required:[]}},
   'send_email':{name:'send_email',description:'发送邮件(需在设置→邮件中配置SMTP)。⚠️SMTP未配置时自动降级为mailto:(附件可能丢失)。返回值含delivery_method标明实际发送方式(smtp/mailto),请检查。建议先确认用户已配置SMTP',executor:'main_thread',
     parameters:{type:'object',properties:{to:{type:'string',description:'收件人邮箱'},subject:{type:'string',description:'主题'},body:{type:'string',description:'正文(Markdown或纯文本)'},body_type:{type:'string',enum:['plain','markdown'],default:'plain'},cc:{type:'string',description:'抄送(逗号分隔)'},attachments:{type:'array',items:{type:'string'},description:'附件文件路径数组'}},required:['to','subject','body']}},
-  'sql_db':{name:'sql_db',description:'浏览器内SQLite(sql.js/WASM)。query=SELECT→JSON exec=INSERT/UPDATE/DELETE/DDL schema=表结构 export→/downloads/xxx.db import←/uploads/xxx.db(先用file_upload上传) create_table/drop_table=建/删表。⚠️import默认从/uploads/加载,export默认到/downloads/,重名覆盖不报错',executor:'main_thread',
+  'sql_db':{name:'sql_db',description:'浏览器内SQLite(sql.js/WASM)。query=SELECT→JSON exec=INSERT/UPDATE/DELETE/DDL schema=表结构 export→/downloads/xxx.db import←/uploads/xxx.db(用户拖拽上传或用filesystem放到/uploads/目录) create_table/drop_table=建/删表。⚠️import默认从/uploads/加载,export默认到/downloads/,重名覆盖不报错',executor:'main_thread',
     parameters:{type:'object',properties:{action:{type:'string',enum:['query','exec','schema','export','import','create_table','drop_table']},sql:{type:'string',description:'SQL语句(action=query/exec时)。query仅支持SELECT, exec支持INSERT/UPDATE/DELETE/CREATE/ALTER/DROP'},table:{type:'string',description:'表名(action=schema/drop_table/create_table时)'},columns:{type:'array',items:{type:'object',properties:{name:{type:'string'},type:{type:'string',enum:['TEXT','INTEGER','REAL','BLOB']},pk:{type:'boolean'},notNull:{type:'boolean'},default:{type:'string'}}},description:'列定义数组(action=create_table时)'},filename:{type:'string',description:'导入/导出文件名。import默认从/uploads/加载,export默认到/downloads/,重名覆盖不报错'},limit:{type:'number',default:100,maximum:1000}},required:['action']}},
   'browser_notify':{name:'browser_notify',description:'发送浏览器桌面通知(需用户授权)。任务完成/提醒时使用。移动端Android Chrome全支持,iOS Safari需PWA模式',executor:'main_thread',
     parameters:{type:'object',properties:{title:{type:'string',description:'通知标题'},body:{type:'string',description:'通知正文'},icon:{type:'string',description:'图标URL(可选)'},tag:{type:'string',description:'通知标签(同tag会替换旧通知)'},requireInteraction:{type:'boolean',default:false,description:'true=用户点击才关闭 false=自动消失'},delay:{type:'number',description:'延迟毫秒(定时提醒场景)'}},required:['title','body']}},
@@ -1426,7 +1486,7 @@ var SKILL_SCHEMA={
     editable:{type:'boolean',default:true},
     parent_id:{type:'string'},
     prompt_fragment:{type:'string',minLength:1,maxLength:4000},
-    tools:{type:'array',items:{type:'object',required:['tool_name'],properties:{tool_name:{type:'string',enum:['search','filesystem','code_runner','chart','diagram','svg_animator','calculator','file_upload','table_generator','word_generator','fuzzy_search','ocr','custom_api_call']},params:{type:'object'}}}},
+    tools:{type:'array',items:{type:'object',required:['tool_name'],properties:{tool_name:{type:'string',enum:['search','filesystem','chart','diagram','svg_animator','calculator','table_generator','word_generator','fuzzy_search','ocr','custom_api_call']},params:{type:'object'}}}},
     custom_functions:{type:'array',items:{type:'object',required:['name','language','code'],properties:{name:{type:'string',pattern:'^[a-zA-Z_][a-zA-Z0-9_]*$'},language:{type:'string',enum:['javascript']},code:{type:'string',maxLength:10000}}}},
     custom_api_calls:{type:'array',items:{type:'object',required:['method','url'],properties:{method:{type:'string',enum:['GET','POST','PUT','DELETE','PATCH']},url:{type:'string',pattern:'^https://[a-zA-Z0-9.-]+/.*$'},headers:{type:'object'},body_template:{type:'object'}}}}
   }
@@ -3298,6 +3358,8 @@ function renderMarkdown(text){
       try{return katex.renderToString(formula,{displayMode:false,throwOnError:false});}catch(e){return '<code>'+escapeHtml(formula)+'</code>';}
     });
   }
+  // ★ 代码块复制按钮（HTML注入后调用 _injectCodeCopyButtons 操作DOM）
+  html=html.replace(/<pre><code/g,'<pre class="code-block-wrapper"><code');
   return html;
 }
 
@@ -3313,6 +3375,7 @@ var _SAFE_ATTRS={class:1,id:1,style:1,alt:1,title:1,href:1,src:1,
   target:1,rel:1,width:1,height:1,viewBox:1,xmlns:1,d:1,fill:1,stroke:1,
   'stroke-width':1,transform:1,cx:1,cy:1,r:1,rx:1,ry:1,x1:1,y1:1,x2:1,y2:1,
   points:1,'font-size':1,'font-family':1,'text-anchor':1,'dominant-baseline':1,
+  'data-target':1,'data-expand-label':1,'data-collapse-label':1,'data-filename':1,
   'clip-path':1,'stroke-dasharray':1};
 var _DANGEROUS_HREF=/^(javascript|data\s*:|vbscript):/i;
 
@@ -5484,9 +5547,11 @@ return prefix+path+' ('+totalLen+'字符)\n---内容预览---\n'+preview;
         var trashPath='/trash/'+Date.now()+'_'+path.replace(/\//g,'_');
         await createFile(trashPath,fc);
         await deleteFile(path);
+        if(path.indexOf('/uploads/')===0){uploadedFiles=uploadedFiles.filter(function(f){return f.path!==path;});}
         return '♻️ 已移至回收站: '+path+' → '+trashPath+' (可用 filesystem read 恢复内容)';
       }
       await deleteFile(path);
+      if(path.indexOf('/uploads/')===0){uploadedFiles=uploadedFiles.filter(function(f){return f.path!==path;});}
       return '🗑️ 文件已永久删除: '+path;
     case 'rename':
       if(!args.new_name) throw new Error('rename 需要 new_name 参数');
@@ -5511,7 +5576,7 @@ return prefix+path+' ('+totalLen+'字符)\n---内容预览---\n'+preview;
       var lines=src.split('\n');
       if(line<1)line=1;
       if(line>lines.length+1)line=lines.length+1;
-      lines.splice(line-1,0,content);
+      lines.splice(line-1,0,...content.split('\n'));
       await updateFile(path,lines.join('\n'));
       return '已在第 '+line+' 行插入内容: '+path;
     case 'delete_lines':
@@ -5534,7 +5599,7 @@ return prefix+path+' ('+totalLen+'字符)\n---内容预览---\n'+preview;
       var lines3=src3.split('\n');
       if(rlStart>=lines3.length)return '行号超出文件范围: '+path;
       if(rlEnd>lines3.length)rlEnd=lines3.length;
-      lines3.splice(rlStart,rlEnd-rlStart,content);
+      lines3.splice(rlStart,rlEnd-rlStart,...content.split('\n'));
       await updateFile(path,lines3.join('\n'));
       return '已替换第 '+(rlStart+1)+' 到第 '+rlEnd+' 行: '+path;
     case 'list':
@@ -6800,83 +6865,6 @@ async function toolWorldSimulator(args){
 }
 
 
-async function toolFileUpload(args){
-  var action=args.action,filename=args.filename;
-  switch(action){
-    case 'create':
-      if(!args.content)throw new Error('create 需要 content 参数');
-      await createFile('/uploads/'+filename,args.content);
-      return '✅ 文件已创建: '+filename;
-    case 'list':return uploadedFiles.length>0?'已上传文件:\n'+uploadedFiles.map(function(f){return '- '+f.name+' ('+formatSize(f.size)+')';}).join('\n'):'暂无上传文件';
-    case 'read':
-      if(!filename)throw new Error('请指定文件名');
-      var content=await readFile('/uploads/'+filename);
-      if(!content)return '文件不存在: '+filename;
-      var lines=content.split('\n');
-      var totalLines=lines.length;
-      var startLine=args.line||1;
-      var endLine=args.endLine||0;
-      var maxLines=args.maxLines||1000;
-      if(startLine<1)startLine=1;
-      if(startLine>totalLines)return '[文件: '+filename+' | 总行数: '+totalLines+' | ❌ 起始行号 '+startLine+' 超出范围]';
-      if(endLine<=0||endLine>totalLines)endLine=totalLines;
-      if(endLine-startLine+1>maxLines)endLine=startLine+maxLines-1;
-      var selected=lines.slice(startLine-1,endLine);
-      var numbered=selected.map(function(l,i){return (startLine+i)+': '+l;}).join('\n');
-      var info='[文件: '+filename+' | 总行数: '+totalLines+' | 第 '+startLine+'-'+endLine+' 行';
-      if(endLine<totalLines)info+=(' | 剩余 '+(totalLines-endLine)+' 行未读，用 line='+(endLine+1)+' 继续');
-      else info+=' | ✅ 已读完]';
-      return info+']\n---\n'+numbered;
-    case 'delete':
-      await deleteFile('/uploads/'+filename);
-      uploadedFiles=uploadedFiles.filter(function(f){return f.name!==filename;});
-      return '文件已删除: '+filename;
-    case 'append':
-      if(!args.content)throw new Error('append 需要 content 参数');
-      var content=await readFile('/uploads/'+filename)||'';
-      await updateFile('/uploads/'+filename,content+args.content);
-      return '内容已追加到文件末尾: '+filename;
-    case 'update':
-      if(args.content===undefined)throw new Error('update 需要 content 参数');
-      await updateFile('/uploads/'+filename,args.content);
-      return '文件已覆盖更新: '+filename;
-    case 'insert':
-      if(!args.content)throw new Error('insert 需要 content 参数');
-      var line=args.line||1;
-      var src=await readFile('/uploads/'+filename)||'';
-      var lines=src.split('\n');
-      if(line<1)line=1;
-      if(line>lines.length+1)line=lines.length+1;
-      lines.splice(line-1,0,args.content);
-      await updateFile('/uploads/'+filename,lines.join('\n'));
-      return '已在第 '+line+' 行插入内容: '+filename;
-    case 'delete_lines':
-      var dlStart=(args.line||1)-1;
-      var dlEnd=args.endLine||args.line||1;
-      if(dlStart<0)dlStart=0;
-      var src2=await readFile('/uploads/'+filename)||'';
-      var lines2=src2.split('\n');
-      if(dlStart>=lines2.length)return '行号超出文件范围: '+filename;
-      if(dlEnd>lines2.length)dlEnd=lines2.length;
-      lines2.splice(dlStart,dlEnd-dlStart);
-      await updateFile('/uploads/'+filename,lines2.join('\n'));
-      return '已删除第 '+(dlStart+1)+' 到第 '+dlEnd+' 行: '+filename;
-    case 'replace_lines':
-      if(args.content===undefined)throw new Error('replace_lines 需要 content 参数（空字符串=清空指定行）');
-      var rlStart=(args.line||1)-1;
-      var rlEnd=args.endLine||args.line||1;
-      if(rlStart<0)rlStart=0;
-      var src3=await readFile('/uploads/'+filename)||'';
-      var lines3=src3.split('\n');
-      if(rlStart>=lines3.length)return '行号超出文件范围: '+filename;
-      if(rlEnd>lines3.length)rlEnd=lines3.length;
-      lines3.splice(rlStart,rlEnd-rlStart,args.content);
-      await updateFile('/uploads/'+filename,lines3.join('\n'));
-      return '已替换第 '+(rlStart+1)+' 到第 '+rlEnd+' 行: '+filename;
-    default:throw new Error('Unknown file_upload action: '+action);
-  }
-}
-
 async function toolTableGenerator(args){
   var headers=args.headers,rows=args.rows,download_format=args.download_format||null;
   if(!headers||headers.length===0)throw new Error('表格必须包含至少一个表头');
@@ -7069,7 +7057,6 @@ async function executeMainThreadTool(toolName,args){
     case 'chart':return await toolChart(args);
     case 'diagram':return await toolDiagram(args);
     case 'svg_animator':return await toolSVGAnimator(args);
-    case 'file_upload':return await toolFileUpload(args);
     case 'table_generator':return await toolTableGenerator(args);
     case 'word_generator':return await toolWordGenerator(args);
     case 'mcts_plan':return await toolMCTSPlan(args);
@@ -7222,18 +7209,6 @@ async function toolLongtermMemory(args){
       }
     }
     return '未找到ID为 '+args.id+' 的记忆，无法删除。使用 list 查看全部ID。';
-  }
-
-  // ── batch_delete：批量删除记忆 ──
-  if(args.action==='batch_delete'){
-    var ids=args.ids||[];
-    if(!ids.length)return '请指定 ids 要删除的记忆ID数组';
-    var deleted=0;
-    for(var di=facts.length-1;di>=0;di--){
-      if(ids.indexOf(facts[di].id)>=0){facts.splice(di,1);deleted++;}
-    }
-    await _saveLongTermMemory();
-    return '✅ 批量删除 '+deleted+' 条记忆。';
   }
 
   // ── update：按ID修改 ──
@@ -9625,19 +9600,6 @@ async function executeTaskWorkerTool(toolName,args){
       if(!resp||!resp.success)throw new Error(resp?resp.error:'搜索执行失败');
       return resp.data;
     }
-    case 'code_runner':{
-      var filename=args.filename;
-      if(!filename)throw new Error('code_runner 需要 filename 参数');
-      var ext=(filename.split('.').pop()||'').toLowerCase();
-      var language=ext==='py'?'python':ext==='js'?'javascript':null;
-      if(!language)throw new Error('仅支持 .js 和 .py');
-      var code=await readFile(filename);
-      if(code===null)throw new Error('文件不存在: '+filename);
-      // ★ 原始代码直接传给 Worker 沙箱执行，主线程不 eval
-      var resp=await sendToTaskWorker('code_run',{language:language,code:code,timeout:args.timeout||10000,context_files:args.context_files||{}});
-      if(!resp||!resp.success)throw new Error(resp?resp.error:'代码执行失败');
-      return resp.data;
-    }
     case 'fuzzy_search':return await toolFuzzySearch(args);
     case 'ocr':{
       var imgContent=args.image_base64;
@@ -10047,8 +10009,8 @@ async function processUserMessage(userText,taskId){
   var welcomeEl=messagesDiv.querySelector('.welcome-message');
   if(welcomeEl)welcomeEl.remove();
 
-  // 添加用户消息
-  addUserMessage(userText);
+  // 添加用户消息（分叉再生时已有用户气泡，跳过）
+  if(!window._skipAddUser)addUserMessage(userText);
 
   // 检查技能激发：已激活的技能在buildSystemPromptWithSkills中注入，
   // getTriggeredSkillFragments只返回「未激活但触发词匹配」的技能作为推荐
@@ -10065,13 +10027,20 @@ async function processUserMessage(userText,taskId){
       req.onsuccess=function(){res(req.result);};
       req.onerror=function(){rej(req.error);};
     });
-    if(stored&&stored.items&&stored.items.length>0){
+    // ★ 兼容分支格式：优先从当前分支取 items，回退到旧 items
+    var storedItems=null;
+    if(stored&&stored.branches&&stored.currentBranchId){
+      var curBr=stored.branches[stored.currentBranchId];
+      if(curBr&&curBr.items)storedItems=curBr.items;
+    }
+    if(!storedItems&&stored&&stored.items)storedItems=stored.items;
+    if(storedItems&&storedItems.length>0){
       // 取最近N条（由设置面板的上下文消息数滑条控制），转换为 messages 格式
       var maxCtx=(settings.max_context_messages||50);
-      var recentItems=maxCtx>=50?stored.items.slice():stored.items.slice(-maxCtx);
+      var recentItems=maxCtx>=50?storedItems.slice():storedItems.slice(-maxCtx);
       // ★ 向前补齐：确保截断边界不切断 tool_call 链（assistant(tool_calls) → tool(result) 必须成对）
       if(maxCtx<50){
-        var _fullItems=stored.items;
+        var _fullItems=storedItems;
         var _cutIdx=_fullItems.length-maxCtx;
         // 从截断点向前扫描：如果第一条截断消息是 tool 角色，向前补齐到对应的 assistant(tool_calls)
         while(_cutIdx>0&&_fullItems[_cutIdx]&&_fullItems[_cutIdx].tool_call_id){
@@ -10162,6 +10131,7 @@ async function processUserMessage(userText,taskId){
             var body2=contentDiv.querySelector('.msg-body');
             if(body2)body2.innerHTML=renderMarkdown(agentContent);
             else contentDiv.innerHTML=renderMarkdown(agentContent);
+            _injectCodeCopyButtons(contentDiv);
             if(contentDiv.classList.contains('streaming-cursor')){
               contentDiv.classList.remove('streaming-cursor');
             }
@@ -10348,7 +10318,6 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
         toggle.setAttribute('data-target',blockId);
         toggle.setAttribute('data-expand-label',expandLabel||('[>] 查看'+blockLabel));
         toggle.setAttribute('data-collapse-label',collapseLabel||('[v] 收起'+blockLabel));
-        toggle.addEventListener('click',toggleThinking);
         contentDiv.parentNode.insertBefore(toggle,contentDiv);
         contentDiv.parentNode.insertBefore(block,contentDiv);
         return {block:block,toggle:toggle};
@@ -10359,7 +10328,6 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
         toggleEl.className='tool-result-toggle';
         toggleEl.textContent='[>] 查看工具结果: '+toolName;
         toggleEl.setAttribute('data-target',blockId);
-        toggleEl.addEventListener('click',toggleToolResult);
         var resultBlock=document.createElement('div');
         resultBlock.className='tool-result-block collapsed';
         resultBlock.id=blockId;
@@ -10420,7 +10388,8 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             critThinkToggle.id='critique-thinking-toggle-'+agentMessageId+iterSuffix+'-r'+critRound;
             critThinkToggle.textContent='[v] 审查思考'+iterLabelSuffix+' (第'+(critRound+1)+'轮)';
             critThinkToggle.setAttribute('data-target','critique-thinking-'+agentMessageId+iterSuffix+'-r'+critRound);
-            critThinkToggle.addEventListener('click',toggleThinking);
+            critThinkToggle.setAttribute('data-collapse-label','[v] 审查思考'+iterLabelSuffix+' (第'+(critRound+1)+'轮)');
+            critThinkToggle.setAttribute('data-expand-label','[>] 审查思考'+iterLabelSuffix+' (第'+(critRound+1)+'轮)');
             contentDiv.parentNode.insertBefore(critThinkToggle,contentDiv);
             contentDiv.parentNode.insertBefore(critThinkBlock,contentDiv);
             _critiqueLastEl=critThinkBlock;
@@ -10518,7 +10487,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
           for(var _ri=0; _ri<_preUserMessages.length; _ri++){revisionMessages.push(_preUserMessages[_ri]);}
           revisionMessages.push({
             role:'user',
-            content:'[用户问题]\\n'+userText+'\\n\\n[草稿答案]\\n'+_currentContent.substring(0,8000)+'\\n\\n[审查报告]\\n'+evalReport
+            content:'[用户问题]\\n'+userText+'\\n\\n[草稿答案]\\n'+_currentContent.substring(0,8000)+_toolCallSummary+'\\n\\n[审查报告]\\n'+evalReport
           });
 
 
@@ -10534,7 +10503,8 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             revThinkToggle.id='revision-thinking-toggle-'+agentMessageId+iterSuffix+'-r'+revRound;
             revThinkToggle.textContent='[v] 修正思考'+iterLabelSuffix+' (第'+(revRound+1)+'轮)';
             revThinkToggle.setAttribute('data-target','revision-thinking-'+agentMessageId+iterSuffix+'-r'+revRound);
-            revThinkToggle.addEventListener('click',toggleThinking);
+            revThinkToggle.setAttribute('data-collapse-label','[v] 修正思考'+iterLabelSuffix+' (第'+(revRound+1)+'轮)');
+            revThinkToggle.setAttribute('data-expand-label','[>] 修正思考'+iterLabelSuffix+' (第'+(revRound+1)+'轮)');
             contentDiv.parentNode.insertBefore(revThinkToggle,contentDiv);
             contentDiv.parentNode.insertBefore(revThinkBlock,contentDiv);
             _revisionLastEl=revThinkBlock;
@@ -10552,7 +10522,9 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
                   var bodyR=contentDiv.querySelector('.msg-body');
                   if(bodyR)bodyR.innerHTML=renderMarkdown(agentContent);
                   else contentDiv.innerHTML=renderMarkdown(agentContent);
+                  _injectCodeCopyButtons(contentDiv);
                   revision.block.textContent='✏️ 修正中'+iterLabelSuffix+' (第'+(revRound+1)+'轮)...\n\n'+agentContent.substring(0,2000)+(agentContent.length>2000?'\n...(持续输出中)':'');
+
                 }
                 if(delta&&delta.tool_calls){
                   for(var t=0;t<delta.tool_calls.length;t++){
@@ -10803,17 +10775,12 @@ function addUserMessage(text){
   var contentDiv=document.createElement('div');
   contentDiv.className='message-content';
   contentDiv.textContent=text;
-  var delBtn=document.createElement('button');
-  delBtn.className='msg-delete-btn';
-  delBtn.textContent='✕';
-  delBtn.title='删除消息';
-  delBtn.onclick=function(e){e.stopPropagation();handleMessageDelete(msgDiv);};
-  contentDiv.appendChild(delBtn);
   msgDiv.appendChild(contentDiv);
   var tsDiv=document.createElement('div');
   tsDiv.className='message-timestamp';
   tsDiv.textContent=new Date().toLocaleTimeString();
   msgDiv.appendChild(tsDiv);
+  _addMsgActions(msgDiv,true);
   messagesDiv.appendChild(msgDiv);
   messagesDiv.scrollTop=messagesDiv.scrollHeight;
 }
@@ -10826,14 +10793,7 @@ function addAgentMessageContainer(messageId){
   msgDiv.className='message agent';
   var contentDiv=document.createElement('div');
   contentDiv.className='message-content streaming-cursor';
-  // 使用 .msg-body 包装层，后续 renderMarkdown 只写到这里，不影响兄弟元素（删除按钮等）
   contentDiv.innerHTML='<div class="msg-body"><div class="thinking-indicator"><div class="dots"><span></span><span></span><span></span></div>思考中...</div></div>';
-  var delBtn=document.createElement('button');
-  delBtn.className='msg-delete-btn';
-  delBtn.textContent='✕';
-  delBtn.title='删除消息';
-  delBtn.onclick=function(e){e.stopPropagation();handleMessageDelete(msgDiv);};
-  contentDiv.appendChild(delBtn);
   msgDiv.appendChild(contentDiv);
   var tsDiv=document.createElement('div');
   tsDiv.className='message-timestamp';
@@ -10853,6 +10813,7 @@ function addAgentMessageContainer(messageId){
   fbDiv.appendChild(btnLike);
   fbDiv.appendChild(btnDislike);
   msgDiv.appendChild(fbDiv);
+  _addMsgActions(msgDiv,false);
   msgDiv._msgId = messageId;
   messagesDiv.appendChild(msgDiv);
   return msgDiv;
@@ -10860,26 +10821,9 @@ function addAgentMessageContainer(messageId){
 
 function handleMessageDelete(msgDiv) {
   if (!window.confirm('确定删除这条消息？')) return;
-  try {
-    // 清理关联的文件blob引用
-    if(window._recentFileBlobs){
-      var cd=msgDiv.querySelector('.message-content');
-      if(cd){
-        var btns=cd.querySelectorAll('[data-filename]');
-        for(var bi=0;bi<btns.length;bi++){
-          var fn=btns[bi].getAttribute('data-filename');
-          if(fn)delete window._recentFileBlobs[fn];
-        }
-      }
-    }
-    // 移除DOM
-    var parent=msgDiv.parentNode;
-    if(parent)parent.removeChild(msgDiv);
-    else msgDiv.remove();
-    // 持久化
-    saveCurrentMessages().catch(function(){});
-    showToast('消息已删除','success');
-  } catch(e) { showToast('删除失败: '+e.message,'error'); }
+  if (msgDiv.parentNode) msgDiv.parentNode.removeChild(msgDiv);
+  _saveBranchMessages(currentConversationId).catch(function(){});
+  showToast('消息已删除','success');
 }
 
 function updateThinkingBlock(msgDiv, thinkingText) {
@@ -10910,7 +10854,6 @@ function updateThinkingBlock(msgDiv, thinkingText) {
     toggleEl.id = 'thinking-toggle-' + msgDiv._msgId + '-r' + round;
     toggleEl.textContent = '[v] 思考过程' + (round > 0 ? ' (第' + (round+1) + '轮)' : '');
     toggleEl.setAttribute('data-target', blockId);
-    toggleEl.addEventListener('click', toggleThinking);
     contentDiv.parentNode.insertBefore(toggleEl, thinkingBlock);
   }
   thinkingBlock.classList.remove('collapsed');
@@ -10943,16 +10886,15 @@ function addToolResultBlock(msgDiv, toolName, resultContent, toolIndex) {
   toggleEl.className = 'tool-result-toggle';
   toggleEl.textContent = '[>] 查看工具结果: ' + toolName;
   toggleEl.setAttribute('data-target', 'tool-result-' + msgDiv._msgId + '-' + toolIndex);
-  toggleEl.addEventListener('click', toggleToolResult);
   var resultBlock = document.createElement('div');
   resultBlock.className = 'tool-result-block collapsed';
   resultBlock.id = 'tool-result-' + msgDiv._msgId + '-' + toolIndex;
   resultBlock.textContent = resultContent;
-  // 插入到 contentDiv 之前，保持 思考→工具→文本 的时序顺序
+  // 插入到 contentDiv 之前（兄弟节点），保持 思考→工具→文本 的时序顺序
   var contentDiv = msgDiv.querySelector('.message-content');
   if (contentDiv) {
-    msgDiv.insertBefore(toggleEl, contentDiv);
-    msgDiv.insertBefore(resultBlock, contentDiv);
+    contentDiv.parentNode.insertBefore(toggleEl, contentDiv);
+    contentDiv.parentNode.insertBefore(resultBlock, contentDiv);
   } else {
     msgDiv.appendChild(toggleEl);
     msgDiv.appendChild(resultBlock);
@@ -12235,7 +12177,403 @@ function initEventBindings(){
       debugLogger.info('破甲模块: '+(this.checked?'已开启':'已关闭')+' (即时生效，下次对话自动注入)');
     });
   }
+
+  // ★ 消息折叠开关事件委托 — innerHTML恢复后仍生效
+  var msgListDel=document.getElementById('messagesList');
+  if(msgListDel){
+    msgListDel.addEventListener('click',function(e){
+      var t=e.target;
+      // thinking 折叠开关
+      if(t.classList.contains('thinking-toggle')){
+        var bid=t.getAttribute('data-target');
+        var blk=t.closest('.message.agent');
+        if(blk)blk=blk.querySelector('[id="'+bid+'"]');
+        if(blk)blk.classList.toggle('collapsed');
+        var collapsed=blk&&blk.classList.contains('collapsed');
+        t.textContent=collapsed?(t.getAttribute('data-expand-label')||'[>] 查看思考过程'):(t.getAttribute('data-collapse-label')||'[v] 收起思考过程');
+      }
+      // 工具结果折叠开关
+      if(t.classList.contains('tool-result-toggle')){
+        var tbid=t.getAttribute('data-target');
+        var tblk=document.getElementById(tbid);
+        if(tblk)tblk.classList.toggle('collapsed');
+        var tname=t.textContent.replace(/^\[.\] (查看|收起)工具结果:?\s*/,'');
+        if(tblk&&tblk.classList.contains('collapsed'))t.textContent='[>] 查看工具结果: '+tname;
+        else if(tblk)t.textContent='[v] 收起工具结果: '+tname;
+      }
+    });
+  }
 }
+
+
+  // ★ 消息操作按钮容器创建
+  window._addMsgActions=function(msgDiv,isUser){
+    if(msgDiv.querySelector('.msg-actions'))return;
+    var actions=document.createElement('div');
+    actions.className='msg-actions';
+    // 编辑按钮
+    var btnEdit=document.createElement('button');
+    btnEdit.className='msg-action-btn act-edit';
+    btnEdit.innerHTML='<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7\"/><path d=\"M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z\"/></svg>';
+    btnEdit.title='编辑消息';
+    btnEdit.onclick=function(e){e.stopPropagation();_openEditModal(msgDiv);};
+    actions.appendChild(btnEdit);
+    // 复制全文按钮
+    var btnCopy=document.createElement('button');
+    btnCopy.className='msg-action-btn act-copy';
+    btnCopy.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+    btnCopy.title='复制全文';
+    btnCopy.onclick=function(e){e.stopPropagation();_copyBubbleText(msgDiv);};
+    actions.appendChild(btnCopy);
+    // 重新生成按钮
+    var btnRegen=document.createElement('button');
+    btnRegen.className='msg-action-btn act-regen';
+    btnRegen.innerHTML='<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"1 4 1 10 7 10\"/><path d=\"M3.51 15a9 9 0 102.13-9.36L1 10\"/></svg>';
+    btnRegen.title='重新生成';
+    btnRegen.onclick=function(e){e.stopPropagation();_handleRegenerate(msgDiv);};
+    actions.appendChild(btnRegen);
+    // 从此处继续按钮
+    var btnCont=document.createElement('button');
+    btnCont.className='msg-action-btn act-continue';
+    btnCont.innerHTML='<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><line x1=\"12\" y1=\"5\" x2=\"12\" y2=\"19\"/><polyline points=\"19 12 12 19 5 12\"/></svg>';
+    btnCont.title='从此处继续';
+    btnCont.onclick=function(e){e.stopPropagation();_handleContinueFromHere(msgDiv);};
+    actions.appendChild(btnCont);
+    // 删除按钮
+    var btnDel=document.createElement('button');
+    btnDel.className='msg-action-btn act-delete';
+    btnDel.innerHTML='<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"3 6 5 6 21 6\"/><path d=\"M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2\"/></svg>';
+    btnDel.title='删除消息';
+    btnDel.onclick=function(e){e.stopPropagation();handleMessageDelete(msgDiv);};
+    actions.appendChild(btnDel);
+    msgDiv.appendChild(actions);
+  };
+
+
+  // ★ 气泡文本复制
+  window._copyBubbleText=function(msgDiv){
+    var cd=msgDiv.querySelector('.message-content');
+    var text=cd?(cd.textContent||cd.innerText||''):'';
+    if(navigator.clipboard){navigator.clipboard.writeText(text).then(function(){showToast('已复制 ✓','success');});}
+    else{showToast('复制失败','error');}
+  };
+
+  // ★ 代码块复制按钮注入（简约圆形，同款功能气泡风格）
+  window._injectCodeCopyButtons=function(container){
+    if(!container)return;
+    var pres=container.querySelectorAll('pre code');
+    for(var pi=0;pi<pres.length;pi++){
+      var pre=pres[pi].parentNode;
+      var newPre=pre.cloneNode(true);
+      pre.parentNode.replaceChild(newPre,pre);
+      pre=newPre;
+      if(!pre.style.position||pre.style.position=='static')pre.style.position='relative';
+      var btn=document.createElement('button');
+      btn.className='code-copy-btn';
+      btn.title='复制代码';
+      btn.innerHTML='<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\" ry=\"2\"/><path d=\"M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1\"/></svg>';
+      (function(thePre,theBtn){
+        theBtn.onclick=function(e){e.stopPropagation();var code=thePre.querySelector('code');if(code&&navigator.clipboard){navigator.clipboard.writeText(code.textContent||'').then(function(){showToast('代码已复制 ✓','success');});}};
+        thePre.addEventListener('mouseenter',function(){theBtn.style.opacity='1';});
+        thePre.addEventListener('mouseleave',function(){theBtn.style.opacity='0';});
+      })(pre,btn);
+      pre.appendChild(btn);
+    }
+  };
+
+
+  // ★ 气泡级分支导航渲染：在forkPoint气泡上绘制 < 1/2 >
+  window._renderBubbleBranchNavs=function(){
+    if(!currentConversationId)return;
+    var bd=_getBranchData(currentConversationId);
+    var oldNavs=document.querySelectorAll('.bubble-branch-nav');
+    for(var on=0;on<oldNavs.length;on++)oldNavs[on].remove();
+    var curId=bd._currentBranchId;
+    var visited={};
+    while(curId&&!visited[curId]){
+      visited[curId]=true;
+      var br=bd._branches[curId];
+      if(!br)break;
+      var fp=br.forkPoint,pid=br.parentId;
+      if(pid&&bd._branches[pid]&&fp>=0){
+        var siblings=[];
+        for(var bid in bd._branches){
+          if(!bd._branches.hasOwnProperty(bid))continue;
+          var sb=bd._branches[bid];
+          if(sb.parentId===pid&&sb.forkPoint===fp)siblings.push(bid);
+        }
+        if(siblings.indexOf(pid)<0)siblings.push(pid);
+        siblings.sort(function(a,b){return (bd._branchOrder.indexOf(a)||0)-(bd._branchOrder.indexOf(b)||0);});
+        if(siblings.length>1){
+          var bubbles=document.querySelectorAll('#messagesList>.message.user,#messagesList>.message.agent');
+          if(fp<bubbles.length){
+            var fb=bubbles[fp];
+            if(!fb.querySelector('.bubble-branch-nav')){
+              var nav=document.createElement('div');
+              nav.className='bubble-branch-nav';
+              var si=siblings.indexOf(curId);
+              nav.setAttribute('data-fork-point',fp);
+              nav.setAttribute('data-parent-id',pid);
+              var prevBtn=document.createElement('button');
+              prevBtn.innerHTML='<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"15 18 9 12 15 6\"/></svg>';
+              prevBtn.disabled=(si<=0);
+              prevBtn.onclick=function(p,f,s,idx){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,idx-1);};}(pid,fp,siblings,si);
+              nav.appendChild(prevBtn);
+              var label=document.createElement('span');
+              label.className='branch-label';
+              label.textContent='<'+(si+1)+'/'+siblings.length+'>';
+              nav.appendChild(label);
+              var nextBtn=document.createElement('button');
+              nextBtn.innerHTML='<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"9 18 15 12 9 6\"/></svg>';
+              nextBtn.disabled=(si>=siblings.length-1);
+              nextBtn.onclick=function(p,f,s,idx){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,idx+1);};}(pid,fp,siblings,si);
+              nav.appendChild(nextBtn);
+              fb.appendChild(nav);
+            }
+          }
+        }
+      }
+      var childGroups={};
+      for(var cid in bd._branches){
+        if(!bd._branches.hasOwnProperty(cid))continue;
+        var cb=bd._branches[cid];
+        if(cb.parentId===curId&&cb.forkPoint>=0){
+          var cfp=cb.forkPoint;
+          if(!childGroups[cfp])childGroups[cfp]=[];
+          if(childGroups[cfp].indexOf(cid)<0)childGroups[cfp].push(cid);
+        }
+      }
+      for(var cfp in childGroups){
+        if(!childGroups.hasOwnProperty(cfp))continue;
+        var childList=childGroups[cfp];
+        if(childList.indexOf(curId)<0)childList.push(curId);
+        if(childList.length>1){
+          var fpNum=parseInt(cfp);
+          var bubbles2=document.querySelectorAll('#messagesList>.message.user,#messagesList>.message.agent');
+          if(fpNum<bubbles2.length){
+            var fb2=bubbles2[fpNum];
+            if(!fb2.querySelector('.bubble-branch-nav')){
+              var nav2=document.createElement('div');
+              nav2.className='bubble-branch-nav';
+              var si2=childList.indexOf(curId);
+              nav2.setAttribute('data-fork-point',fpNum);
+              nav2.setAttribute('data-parent-id',curId);
+              var prevBtn2=document.createElement('button');
+              prevBtn2.innerHTML='<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"15 18 9 12 15 6\"/></svg>';
+              prevBtn2.disabled=(si2<=0);
+              prevBtn2.onclick=function(p,f,l,idx){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,idx-1);};}(curId,fpNum,childList,si2);
+              nav2.appendChild(prevBtn2);
+              var label2=document.createElement('span');
+              label2.className='branch-label';
+              label2.textContent='<'+(si2+1)+'/'+childList.length+'>';
+              nav2.appendChild(label2);
+              var nextBtn2=document.createElement('button');
+              nextBtn2.innerHTML='<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"9 18 15 12 9 6\"/></svg>';
+              nextBtn2.disabled=(si2>=childList.length-1);
+              nextBtn2.onclick=function(p,f,l,idx){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,idx+1);};}(curId,fpNum,childList,si2);
+              nav2.appendChild(nextBtn2);
+              fb2.appendChild(nav2);
+            }
+          }
+        }
+      }
+      curId=pid;
+    }
+  };
+
+  // ★ 气泡级分支切换
+  window._switchBubbleBranch=async function(parentId,forkPoint,targetSiblingIdx){
+    if(!currentConversationId)return;
+    var msgList=document.getElementById('messagesList');
+    var bd=_getBranchData(currentConversationId);
+    bd._branches[bd._currentBranchId].items=_collectBubbles(msgList);
+    var siblings=[];
+    for(var bid in bd._branches){
+      if(!bd._branches.hasOwnProperty(bid))continue;
+      var sb=bd._branches[bid];
+      if(sb.parentId===parentId&&sb.forkPoint===forkPoint)siblings.push(bid);
+    }
+    if(siblings.indexOf(parentId)<0)siblings.push(parentId);
+    siblings.sort(function(a,b){return (bd._branchOrder.indexOf(a)||0)-(bd._branchOrder.indexOf(b)||0);});
+    if(targetSiblingIdx<0||targetSiblingIdx>=siblings.length)return;
+    var newBranchId=siblings[targetSiblingIdx];
+    if(newBranchId===bd._currentBranchId)return;
+    bd._currentBranchId=newBranchId;
+    var bubbles=msgList.querySelectorAll('.message.user,.message.agent');
+    for(var bi=bubbles.length-1;bi>forkPoint;bi--){
+      if(bubbles[bi].parentNode)bubbles[bi].parentNode.removeChild(bubbles[bi]);
+    }
+    var newItems=bd._branches[newBranchId].items||[];
+    for(var ni=forkPoint+1;ni<newItems.length;ni++){
+      var nm=newItems[ni];
+      if(nm.role==='user')addUserMessage(nm.content);
+      else{
+        var ndiv=document.createElement('div');ndiv.className='message agent';
+        ndiv.innerHTML=sanitizeArtifactHTML(nm.content||'');
+        var ncd=ndiv.querySelector('.message-content');
+        if(ncd){
+          var nbody=ncd.querySelector('.msg-body');
+          if(!nbody){nbody=document.createElement('div');nbody.className='msg-body';while(ncd.firstChild)nbody.appendChild(ncd.firstChild);ncd.appendChild(nbody);}
+          var ndlBtns=ncd.querySelectorAll('[data-filename]');
+          for(var ndi=0;ndi<ndlBtns.length;ndi++){ndlBtns[ndi].onclick=function(e){e.stopPropagation();_downloadRecentFile(this);};}
+        }
+        _addMsgActions(ndiv,false);msgList.appendChild(ndiv);
+      }
+    }
+    msgList.scrollTop=msgList.scrollHeight;
+    var db=await getDB();
+    var tx=db.transaction('messages','readwrite');
+    var store=tx.objectStore('messages');
+    store.put({id:currentConversationId,branches:bd._branches,currentBranchId:bd._currentBranchId,branchOrder:bd._branchOrder,updatedAt:Date.now()});
+    await new Promise(function(res,rej){tx.oncomplete=res;tx.onerror=rej;});
+    _renderBubbleBranchNavs();
+  };
+
+  // ★ 分叉核心：在当前分支的forkPoint处分叉 → 存DB → nav从<X/N>变<X+1/N+1> → 自动发送
+  window._forkAtForkPoint=async function(autoSendText){
+    var msgList=document.getElementById('messagesList');
+    if(!msgList||!currentConversationId)return;
+    var bd=_getBranchData(currentConversationId);
+    var curId=bd._currentBranchId;
+    var curBr=bd._branches[curId];
+    var fp=curBr.forkPoint;
+    var pid=curBr.parentId;
+    // 主分支无forkPoint：在最后一个用户气泡处fork
+    if(fp<0||!pid||!bd._branches[pid]){
+      var bubbles=Array.from(msgList.querySelectorAll('.message.user,.message.agent'));
+      fp=bubbles.length-1;
+      for(var fi=bubbles.length-1;fi>=0;fi--){if(bubbles[fi].classList.contains('user')){fp=fi;break;}}
+      pid=curId;
+    }
+    // 保存旧分支items
+    bd._branches[curId].items=_collectBubbles(msgList);
+    // 删除forkPoint之后的DOM气泡
+    var bubbles=msgList.querySelectorAll('.message.user,.message.agent');
+    for(var bi=bubbles.length-1;bi>fp;bi--){
+      if(bubbles[bi].parentNode)bubbles[bi].parentNode.removeChild(bubbles[bi]);
+    }
+    // 新分支items = prefix(0..fp)
+    var prefixItems=bd._branches[curId].items.slice(0,fp+1);
+    var newBid='b_'+Date.now();
+    bd._branches[newBid]={items:prefixItems,parentId:pid,forkPoint:fp};
+    bd._currentBranchId=newBid;
+    if(bd._branchOrder.indexOf(newBid)<0)bd._branchOrder.push(newBid);
+    var db=await getDB();
+    var tx=db.transaction('messages','readwrite');
+    var store=tx.objectStore('messages');
+    store.put({id:currentConversationId,branches:bd._branches,currentBranchId:bd._currentBranchId,branchOrder:bd._branchOrder,updatedAt:Date.now()});
+    await new Promise(function(res,rej){tx.oncomplete=res;tx.onerror=rej;});
+    _renderBubbleBranchNavs();
+    if(autoSendText){
+      window._skipAddUser=true;
+      processUserMessage(autoSendText).then(function(){window._skipAddUser=false;}).catch(function(e){window._skipAddUser=false;showToast('发送失败: '+e.message,'error');});
+    }else{
+      var input=document.getElementById('userInput');
+      if(input){input.focus();input.scrollIntoView({behavior:'smooth'});}
+      showToast('已创建新分支 ✓','success');
+    }
+  };
+
+  // ★ 重新生成：在当前分支的forkPoint处分叉+自动发送用户消息
+  window._handleRegenerate=function(msgDiv){
+    if(!confirm('将从此处重新生成一个新分支。确定？'))return;
+    var msgList=document.getElementById('messagesList');
+    if(!msgList)return;
+    var bubbles=Array.from(msgList.querySelectorAll('.message.user,.message.agent'));
+    var idx=bubbles.indexOf(msgDiv);
+    if(idx<0)return;
+    var userText='';
+    for(var i=idx;i>=0;i--){
+      if(bubbles[i].classList.contains('user')){userText=(bubbles[i].querySelector('.message-content')||{}).textContent||'';break;}
+    }
+    if(!userText){showToast('未找到关联的用户消息','error');return;}
+    _forkAtForkPoint(userText);
+  };
+
+  // ★ 从此处继续：在当前分支的forkPoint处分叉+自动发送
+  window._handleContinueFromHere=function(msgDiv){
+    if(!confirm('将从此处创建新分支对话。确定？'))return;
+    var msgList=document.getElementById('messagesList');
+    if(!msgList)return;
+    var bubbles=Array.from(msgList.querySelectorAll('.message.user,.message.agent'));
+    var idx=bubbles.indexOf(msgDiv);
+    if(idx<0)return;
+    var userText='';
+    for(var i=idx;i>=0;i--){
+      if(bubbles[i].classList.contains('user')){userText=(bubbles[i].querySelector('.message-content')||{}).textContent||'';break;}
+    }
+    if(!userText){showToast('未找到关联的用户消息','error');return;}
+    _forkAtForkPoint(userText);
+  };
+
+
+  // ★ 编辑消息模态框
+  window._editTargetMsg=null;
+  window._openEditModal=function(msgDiv){
+    var cd=msgDiv.querySelector('.message-content');
+    if(!cd)return;
+    var isUser=msgDiv.classList.contains('user');
+    var text=isUser?(cd.textContent||cd.innerText||''):(cd.querySelector('.msg-body')||cd).innerText||'';
+    document.getElementById('editMessageTextarea').value=text.trim();
+    document.getElementById('editMessageModal').style.display='flex';
+    _editTargetMsg=msgDiv;
+  };
+  document.getElementById('btnEditModalClose').onclick=function(){
+    document.getElementById('editMessageModal').style.display='none';_editTargetMsg=null;
+  };
+  document.getElementById('btnEditSave').onclick=function(){
+    if(!_editTargetMsg)return;
+    var newText=document.getElementById('editMessageTextarea').value.trim();
+    if(!newText){showToast('内容不能为空','error');return;}
+    var cd=_editTargetMsg.querySelector('.message-content');
+    if(cd){var body=cd.querySelector('.msg-body');if(body)body.textContent=newText;else cd.textContent=newText;}
+    document.getElementById('editMessageModal').style.display='none';_editTargetMsg=null;
+    saveCurrentMessages().catch(function(){});showToast('消息已更新 ✓','success');
+  };
+  document.getElementById('btnEditSaveSend').onclick=function(){
+    if(!_editTargetMsg)return;
+    var newText=document.getElementById('editMessageTextarea').value.trim();
+    if(!newText){showToast('内容不能为空','error');return;}
+    if(!confirm('将以编辑后的内容创建新分支并发送。确定？'))return;
+    var target=_editTargetMsg;
+    document.getElementById('editMessageModal').style.display='none';_editTargetMsg=null;
+    var cd2=target.querySelector('.message-content');
+    if(cd2){var body2=cd2.querySelector('.msg-body');if(body2)body2.textContent=newText;else cd2.textContent=newText;}
+    saveCurrentMessages().catch(function(){});
+    _forkAtForkPoint(newText);
+  };
+  document.getElementById('editMessageModal').addEventListener('click',function(e){
+    if(e.target===this){this.style.display='none';_editTargetMsg=null;}
+  });
+
+  // ★ 滚动监听：显示/隐藏回底按钮 + 自动滚底开关
+  var _userScrolledUp=false;
+  var _scrollToBottomBtn=document.getElementById('scrollToBottomBtn');
+  var msgListDel=document.getElementById('messagesList');
+  if(msgListDel&&_scrollToBottomBtn){
+    msgListDel.addEventListener('scroll',function(){
+      var distToBottom=msgListDel.scrollHeight-msgListDel.scrollTop-msgListDel.clientHeight;
+      if(distToBottom>120){
+        if(!_userScrolledUp){_userScrolledUp=true;}
+        _scrollToBottomBtn.style.display='flex';
+      }else{
+        _userScrolledUp=false;
+        _scrollToBottomBtn.style.display='none';
+      }
+    });
+    _scrollToBottomBtn.addEventListener('click',function(){
+      msgListDel.scrollTop=msgListDel.scrollHeight;
+      _userScrolledUp=false;
+      _scrollToBottomBtn.style.display='none';
+    });
+  }
+  // 初始加载后自动滚底
+  if(msgListDel){msgListDel.scrollTop=msgListDel.scrollHeight;}
+
+// ★ 关闭/刷新前保存当前对话
+window.addEventListener('beforeunload',function(){
+  saveCurrentMessages();
+});
 
 // ================================================================
 // 第42部分：启动初始化
@@ -12484,17 +12822,34 @@ async function switchConversation(convId,forceSwitch){
         targetState._container.className='messages-list';
         targetState._container.style.cssText='display:flex;flex-direction:column;gap:16px';
       }
-      if(!msgs||!msgs.items||msgs.items.length===0){
+      // ★ 旧格式自动迁移
+      if(msgs&&msgs.items&&!msgs.branches){
+        var legacyBid='b_'+Date.now();
+        msgs={branches:{}};
+        msgs.branches[legacyBid]={items:msgs.items,parentId:null,forkPoint:0,label:'分支 1'};
+        msgs.currentBranchId=legacyBid;
+        msgs.branchOrder=[legacyBid];
+      }
+      var bd=_getBranchData(convId);
+      if(msgs&&msgs.branches){
+        bd._branches=msgs.branches;
+        bd._currentBranchId=msgs.currentBranchId;
+        bd._branchOrder=msgs.branchOrder||Object.keys(msgs.branches);
+      }
+      var curBranch=bd._branches[bd._currentBranchId];
+      var branchItems=(curBranch&&curBranch.items)||[];
+      if(!branchItems.length){
         msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>请开始对话。</p></div>';
       }else{
-        for(var mi=0;mi<msgs.items.length;mi++){
-          var m=msgs.items[mi];
+        for(var mi=0;mi<branchItems.length;mi++){
+          var m=branchItems[mi];
           if(m.role==='user')addUserMessage(m.content);
           else if(m.role==='assistant'||m.role==='agent'){
-            var div=addAgentMessageContainer(m.id||crypto.randomUUID());
+            var div=document.createElement('div');
+            div.className='message agent';
+            div.innerHTML=sanitizeArtifactHTML(m.content||'');
             var cd=div.querySelector('.message-content');
-            if(!cd)continue;
-            cd.innerHTML=sanitizeArtifactHTML(m.content||'');
+            if(!cd){msgList.appendChild(div);continue;}
             var dlBtns=cd.querySelectorAll('[data-filename]');
             for(var dbi=0;dbi<dlBtns.length;dbi++){
               dlBtns[dbi].onclick=function(e){e.stopPropagation();_downloadRecentFile(this);};
@@ -12506,20 +12861,16 @@ async function switchConversation(convId,forceSwitch){
               while(cd.firstChild){body.appendChild(cd.firstChild);}
               cd.appendChild(body);
             }
-            if(!cd.querySelector('.msg-delete-btn')){
-              var delBtn2=document.createElement('button');
-              delBtn2.className='msg-delete-btn';
-              delBtn2.textContent='✕';
-              delBtn2.title='删除消息';
-              (function(wrapper){delBtn2.onclick=function(e){e.stopPropagation();handleMessageDelete(wrapper);};})(div);
-              cd.appendChild(delBtn2);
-            }
+            _addMsgActions(div,false);
+            msgList.appendChild(div);
+            if(cd)_injectCodeCopyButtons(cd);
           }
         }
         while(targetState._container.firstChild){
           msgList.appendChild(targetState._container.firstChild);
         }
       }
+      _renderBubbleBranchNavs();
       setStatus('idle');
     }catch(e){debugLogger.warn('切换会话失败: '+e.message);}
     renderConversationList();
@@ -12528,103 +12879,78 @@ async function switchConversation(convId,forceSwitch){
   _streamTargetConvId=_savedStreamTarget;
 }
 
-// 保存当前消息
-async function saveCurrentMessages(){
-  if(!currentConversationId)return;
+// ★ 从DOM收集气泡条目
+function _collectBubbles(msgList){
+  var items=[];
+  var bubbles=msgList.querySelectorAll('.message.user,.message.agent');
+  for(var bi=0;bi<bubbles.length;bi++){
+    var b=bubbles[bi];
+    var isUser=b.classList.contains('user');
+    var cd=b.querySelector('.message-content');
+    if(!cd)continue;
+    var entry={role:isUser?'user':'assistant',id:crypto.randomUUID()};
+    var actionsEl=b.querySelector('.msg-actions');
+    if(actionsEl)actionsEl.remove();
+    var copyBtns=b.querySelectorAll('.code-copy-btn');
+    for(var cbi=0;cbi<copyBtns.length;cbi++)copyBtns[cbi].remove();
+    if(isUser){entry.content=cd.textContent||cd.innerText||'';}
+    else{entry.content=b.innerHTML||'';}
+    _addMsgActions(b,isUser);
+    items.push(entry);
+  }
+  return items;
+}
+
+// ★ 获取或初始化分支数据
+function _getBranchData(convId){
+  var state=_ensureConvState(convId);
+  if(!state._branches){state._branches={};state._currentBranchId=null;state._branchOrder=[];}
+  if(!state._currentBranchId){
+    var bid='b_'+Date.now();
+    state._branches[bid]={items:[],parentId:null,forkPoint:-1};
+    state._currentBranchId=bid;
+    state._branchOrder=[bid];
+  }
+  return state;
+}
+
+// ★ 分支消息存盘
+async function _saveBranchMessages(convId,msgList){
+  if(!convId)return;
   try{
-    var msgList=document.getElementById('messagesList');
+    if(!msgList)msgList=document.getElementById('messagesList');
     if(!msgList||msgList.childNodes.length===0)return;
-    var items=[];
-    var bubbles=msgList.querySelectorAll('.message.user,.message.agent');
-    for(var bi=0;bi<bubbles.length;bi++){
-      var b=bubbles[bi];
-      var isUser=b.classList.contains('user');
-      var cd=b.querySelector('.message-content');
-      if(!cd)continue;
-      var entry={role:isUser?'user':'assistant',id:crypto.randomUUID()};
-      if(isUser){
-        // 用户消息存纯文本。保存前移除删除按钮，防 ✕ 字符泄露
-        var delBtnU=cd.querySelector('.msg-delete-btn');
-        if(delBtnU)delBtnU.remove();
-        entry.content=cd.textContent||cd.innerText||'';
-        // 立即恢复删除按钮
-        if(!cd.querySelector('.msg-delete-btn')){
-          var restBtnU=document.createElement('button');
-          restBtnU.className='msg-delete-btn';
-          restBtnU.textContent='✕';
-          restBtnU.title='删除消息';
-          (function(wrapper){restBtnU.onclick=function(e){e.stopPropagation();handleMessageDelete(wrapper);};})(b);
-          cd.appendChild(restBtnU);
-        }
-      }else{
-        // agent消息：保存前移除删除按钮，防 ✕ 字符泄露
-        var delBtn=cd.querySelector('.msg-delete-btn');
-        if(delBtn)delBtn.remove();
-        entry.content=cd.innerHTML||'';
-        // 立即恢复删除按钮
-        if(!cd.querySelector('.msg-delete-btn')){
-          var restBtn=document.createElement('button');
-          restBtn.className='msg-delete-btn';
-          restBtn.textContent='✕';
-          restBtn.title='删除消息';
-          (function(wrapper){restBtn.onclick=function(e){e.stopPropagation();handleMessageDelete(wrapper);};})(b);
-          cd.appendChild(restBtn);
-        }
-      }
-      items.push(entry);
-    }
+    var bd=_getBranchData(convId);
+    var items=_collectBubbles(msgList);
+    bd._branches[bd._currentBranchId].items=items;
     var db=await getDB();
     var tx=db.transaction('messages','readwrite');
     var store=tx.objectStore('messages');
-    store.put({id:currentConversationId,items:items,updatedAt:Date.now()});
+    store.put({id:convId,branches:bd._branches,currentBranchId:bd._currentBranchId,branchOrder:bd._branchOrder,updatedAt:Date.now()});
     await new Promise(function(res,rej){tx.oncomplete=res;tx.onerror=rej;});
+    _renderBubbleBranchNavs();
   }catch(e){}
 }
 
-// 【多对话并行】保存指定对话的消息到IndexedDB（基于当前DOM，仅当前显示的对话）
+// 保存当前消息（保持旧签名兼容）
+async function saveCurrentMessages(){
+  await _saveBranchMessages(currentConversationId);
+}
+
+// 【多对话并行】保存指定对话的消息到IndexedDB
 async function saveCurrentMessagesToState(convId){
   if(!convId)return;
   try{
     var state=_ensureConvState(convId);
     var msgList=(convId===currentConversationId)?document.getElementById('messagesList'):(state._container||null);
     if(!msgList||msgList.childNodes.length===0)return;
-    var items=[];
-    var bubbles=msgList.querySelectorAll('.message.user,.message.agent');
-    for(var bi=0;bi<bubbles.length;bi++){
-      var b=bubbles[bi];
-      var isUser=b.classList.contains('user');
-      var cd=b.querySelector('.message-content');
-      if(!cd)continue;
-      var entry={role:isUser?'user':'assistant',id:crypto.randomUUID()};
-      if(isUser){
-        var delBtnU=cd.querySelector('.msg-delete-btn');
-        if(delBtnU)delBtnU.remove();
-        entry.content=cd.textContent||cd.innerText||'';
-        if(!cd.querySelector('.msg-delete-btn')){
-          var restBtnU=document.createElement('button');
-          restBtnU.className='msg-delete-btn';restBtnU.textContent='✕';
-          restBtnU.title='删除消息';
-          (function(wrapper){restBtnU.onclick=function(e){e.stopPropagation();handleMessageDelete(wrapper);};})(b);
-          cd.appendChild(restBtnU);
-        }
-      }else{
-        var delBtn=cd.querySelector('.msg-delete-btn');
-        if(delBtn)delBtn.remove();
-        entry.content=cd.innerHTML||'';
-        if(!cd.querySelector('.msg-delete-btn')){
-          var restBtn=document.createElement('button');
-          restBtn.className='msg-delete-btn';restBtn.textContent='✕';
-          restBtn.title='删除消息';
-          (function(wrapper){restBtn.onclick=function(e){e.stopPropagation();handleMessageDelete(wrapper);};})(b);
-          cd.appendChild(restBtn);
-        }
-      }
-      items.push(entry);
-    }
+    var bd=_getBranchData(convId);
+    var items=_collectBubbles(msgList);
+    bd._branches[bd._currentBranchId].items=items;
     var db=await getDB();
     var tx=db.transaction('messages','readwrite');
     var store=tx.objectStore('messages');
-    store.put({id:convId,items:items,updatedAt:Date.now()});
+    store.put({id:convId,branches:bd._branches,currentBranchId:bd._currentBranchId,branchOrder:bd._branchOrder,updatedAt:Date.now()});
     await new Promise(function(res,rej){tx.oncomplete=res;tx.onerror=rej;});
     state.msgItems=items;
   }catch(e){}
