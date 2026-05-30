@@ -7576,14 +7576,17 @@ async function toolConvertFormat(args){
 
 // --- 地理位置工具 (移植自 吃什么.html CORS免费策略) ---
 var GEO_OVERPASS_INSTANCES=['https://overpass-api.de/api/interpreter','https://overpass-api.private.coffee/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.openstreetmap.fr/api/interpreter'];
-var GEO_NOMINATIM_URL='https://nominatim.openstreetmap.org';
+var GEO_NOMINATIM_INSTANCES=['https://nominatim.openstreetmap.org','https://nominatim.terrestris.de','https://nominatim.ocOSM.nz'];
 
 async function _geoFetchWithFallback(instances,buildReq,timeout){
   timeout=timeout||8000;
   for(var i=0;i<instances.length;i++){
     try{
+      var req=buildReq(instances[i]);
+      var url=instances[i]+(req.urlSuffix||'');
+      delete req.urlSuffix;
       var ctrl=new AbortController();var tid=setTimeout(function(){ctrl.abort();},timeout);
-      var resp=await fetch(instances[i],Object.assign({signal:ctrl.signal},buildReq(instances[i])));
+      var resp=await fetch(url,Object.assign({signal:ctrl.signal},req));
       clearTimeout(tid);if(resp.ok)return await resp.json();
     }catch(e){continue;}
   }
@@ -7597,17 +7600,17 @@ function _calcHaversine(lat1,lng1,lat2,lng2){
 }
 
 async function toolGeoSearch(args){
-  if(!settings.geo_enabled)return '⚠️ 地理位置工具未启用。请在设置→地理位置中开启。';
+  if(!settings.geo_enabled)return JSON.stringify({authorized:false,status:'tool_disabled',message:'⚠️ 地理位置工具未启用。请在设置→地理位置中开启。'});
   // 如果未传 lat/lng，尝试获取当前GPS定位
   if(args.lat===undefined||args.lng===undefined){
     var pos=await _getCurrentPosition();
-    if(!pos)return '⚠️ 未指定 lat/lng 且无法获取GPS定位。请传入坐标参数或先授权定位权限（设置→地理位置→请求定位权限）。';
+    if(!pos)return JSON.stringify({authorized:false,status:'gps_denied',message:'⚠️ 未指定 lat/lng 且无法获取GPS定位。请传入坐标参数或先授权定位权限（设置→地理位置→请求定位权限）。'});
     args.lat=pos.lat;args.lng=pos.lng;
   }
   var lat=args.lat,lng=args.lng,radius=args.radius||1000,category=args.category||'restaurant';
   var query='[out:json][timeout:5];\n(\n  node["amenity"~"'+category+'"](around:'+radius+','+lat+','+lng+');\n  way["amenity"~"'+category+'"](around:'+radius+','+lat+','+lng+');\n);\nout center '+(args.limit||10)+';';
   var data=await _geoFetchWithFallback(GEO_OVERPASS_INSTANCES,function(instance){return {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(query)};},8000);
-  if(!data||!data.elements)return '⚠️ 附近搜索失败(全部Overpass公共实例不可达)。\\n💡 这是正常的——公共实例有时限流。建议: 1)稍后重试 2)缩小radius 3)切换category';
+  if(!data||!data.elements)return JSON.stringify({authorized:true,status:'network_error',message:'⚠️ 附近搜索失败(全部Overpass公共实例不可达)。\\n💡 这是正常的——公共实例有时限流。建议: 1)稍后重试 2)缩小radius 3)切换category'});
   var results=[];
   for(var i=0;i<Math.min(data.elements.length,args.limit||10);i++){
     var el=data.elements[i];var tags=el.tags||{};
@@ -7616,28 +7619,30 @@ async function toolGeoSearch(args){
     var dist=_calcHaversine(lat,lng,elLat,elLng);
     results.push({name:tags.name||'(无名)',type:tags.amenity||category,cuisine:tags.cuisine||'',distance_m:Math.round(dist),lat:Math.round(elLat*1e6)/1e6,lng:Math.round(elLng*1e6)/1e6,address:tags['addr:street']||tags['addr:full']||''});
   }
-  return JSON.stringify({query:{lat:lat,lng:lng,radius:radius,category:category},count:results.length,source:'OpenStreetMap (Overpass API, 免费)',results:results},null,2);
+  return JSON.stringify({authorized:true,status:'ok',query:{lat:lat,lng:lng,radius:radius,category:category},count:results.length,source:'OpenStreetMap (Overpass API, 免费)',results:results},null,2);
 }
 
 async function toolGeoGeocode(args){
-  if(!settings.geo_enabled)return '⚠️ 地理位置工具未启用。请在设置→地理位置中开启。';
-  try{
-    var resp=await fetch(GEO_NOMINATIM_URL+'/search?format=json&q='+encodeURIComponent(args.address)+'&limit=3&accept-language=zh',{signal:AbortSignal.timeout(6000)});
-    if(!resp.ok)return '⚠️ 地理编码失败 (HTTP '+resp.status+')';
-    var results=await resp.json();
-    if(!results.length)return '未找到地址: '+args.address;
-    return JSON.stringify(results.map(function(r){return {display_name:r.display_name,lat:parseFloat(r.lat),lon:parseFloat(r.lon),type:r.type,category:r.category};}),null,2);
-  }catch(e){return '⚠️ 地理编码失败: '+e.message;}
+  if(!settings.geo_enabled)return JSON.stringify({authorized:false,status:'tool_disabled',message:'⚠️ 地理位置工具未启用。请在设置→地理位置中开启。'});
+  var data=await _geoFetchWithFallback(GEO_NOMINATIM_INSTANCES,function(instance){
+    return {
+      urlSuffix:'/search?format=json&q='+encodeURIComponent(args.address)+'&limit=3&accept-language=zh',
+      headers:{'User-Agent':'ExoApp/1.0 (local geocoding tool)'}
+    };
+  },8000);
+  if(!data)return JSON.stringify({authorized:true,status:'network_error',message:'⚠️ 地理编码失败: 全部Nominatim实例不可达(Failed to fetch)。可能原因: 网络受限/GFW阻断。建议通过设置→外部工具配置国内可用的地理编码API。'});
+  if(!data.length)return JSON.stringify({authorized:true,status:'ok',results:[],message:'未找到地址: '+args.address});
+  return JSON.stringify({authorized:true,status:'ok',results:data.map(function(r){return {display_name:r.display_name,lat:parseFloat(r.lat),lon:parseFloat(r.lon),type:r.type,category:r.category};})},null,2);
 }
 
 async function toolGeoIp(args){
-  if(!settings.geo_enabled)return '⚠️ 地理位置工具未启用。请在设置→地理位置中开启。';
+  if(!settings.geo_enabled)return JSON.stringify({authorized:false,status:'tool_disabled',message:'⚠️ 地理位置工具未启用。请在设置→地理位置中开启。'});
   try{
     var resp=await fetch('https://ipapi.co/json/',{signal:AbortSignal.timeout(5000)});
-    if(!resp.ok)return '⚠️ IP定位失败 (HTTP '+resp.status+')';
+    if(!resp.ok)return JSON.stringify({authorized:true,status:'network_error',message:'⚠️ IP定位失败 (HTTP '+resp.status+')'});
     var data=await resp.json();
-    return JSON.stringify({ip:data.ip,city:data.city,region:data.region,country:data.country_name,lat:data.latitude,lon:data.longitude,timezone:data.timezone,org:data.org},null,2);
-  }catch(e){return '⚠️ IP定位失败: '+e.message+'。降级尝试备用服务…';}
+    return JSON.stringify({authorized:true,status:'ok',ip:data.ip,city:data.city,region:data.region,country:data.country_name,lat:data.latitude,lon:data.longitude,timezone:data.timezone,org:data.org},null,2);
+  }catch(e){return JSON.stringify({authorized:true,status:'network_error',message:'⚠️ IP定位失败: '+e.message+'。降级尝试备用服务…'});}
 }
 
 // --- 邮件发送 ---
@@ -9393,22 +9398,22 @@ async function _requestNotifyPermission(){
 }
 
 async function toolBrowserNotify(args){
-  if(!settings.notify_enabled)return '⚠️ 浏览器通知未启用。请在设置→浏览器通知中开启。';
-  if(!('Notification' in window))return '❌ 当前浏览器不支持Notification API。移动端iOS Safari需PWA模式。';
+  if(!settings.notify_enabled)return JSON.stringify({authorized:false,status:'tool_disabled',message:'⚠️ 浏览器通知未启用。请在设置→浏览器通知中开启。'});
+  if(!('Notification' in window))return JSON.stringify({authorized:false,status:'unsupported',message:'❌ 当前浏览器不支持Notification API。移动端iOS Safari需PWA模式。'});
   
   if(args.delay){
     setTimeout(function(){
       _doNotify(args.title,args.body,args.icon,args.tag,args.requireInteraction);
     },args.delay);
-    return '✅ 通知已安排在 '+(args.delay/1000)+' 秒后发送: '+args.title;
+    return JSON.stringify({authorized:true,status:'ok',message:'✅ 通知已安排在 '+(args.delay/1000)+' 秒后发送: '+args.title});
   }
   
   var perm=await _requestNotifyPermission();
-  if(!perm)return '⚠️ 通知权限未授予。请在浏览器设置中允许通知，或点击设置面板中的"请求通知权限"按钮。';
+  if(!perm)return JSON.stringify({authorized:false,status:'permission_denied',message:'⚠️ 通知权限未授予。请在浏览器设置中允许通知，或点击设置面板中的"请求通知权限"按钮。'});
   
   _doNotify(args.title,args.body,args.icon,args.tag,args.requireInteraction);
   _updateNotifyPermStatus();
-  return '🔔 通知已发送: '+args.title;
+  return JSON.stringify({authorized:true,status:'ok',message:'🔔 通知已发送: '+args.title});
 }
 
 function _doNotify(title,body,icon,tag,requireInteraction){
