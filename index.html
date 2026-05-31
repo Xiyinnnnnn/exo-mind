@@ -12655,7 +12655,7 @@ function initEventBindings(){
               var prevBtn=document.createElement('button');
               prevBtn.innerHTML='<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"15 18 9 12 15 6\"/></svg>';
               prevBtn.disabled=(si<=0);
-              prevBtn.onclick=function(p,f,s,idx){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,idx-1);};}(pid,fp,siblings,si);
+              prevBtn.onclick=function(p,f,targetId){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,targetId);};}(pid,fp,siblings[si-1]||null);
               nav.appendChild(prevBtn);
               var label=document.createElement('span');
               label.className='branch-label';
@@ -12664,7 +12664,7 @@ function initEventBindings(){
               var nextBtn=document.createElement('button');
               nextBtn.innerHTML='<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"9 18 15 12 9 6\"/></svg>';
               nextBtn.disabled=(si>=siblings.length-1);
-              nextBtn.onclick=function(p,f,s,idx){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,idx+1);};}(pid,fp,siblings,si);
+              nextBtn.onclick=function(p,f,targetId){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,targetId);};}(pid,fp,siblings[si+1]||null);
               nav.appendChild(nextBtn);
               fb.appendChild(nav);
             }
@@ -12685,6 +12685,7 @@ function initEventBindings(){
         if(!childGroups.hasOwnProperty(cfp))continue;
         var childList=childGroups[cfp];
         if(childList.indexOf(curId)<0)childList.push(curId);
+        childList.sort(function(a,b){return (bd._branchOrder.indexOf(a)||0)-(bd._branchOrder.indexOf(b)||0);});
         if(childList.length>1){
           var fpNum=parseInt(cfp);
           var bubbles2=document.querySelectorAll('#messagesList>.message.user,#messagesList>.message.agent');
@@ -12699,7 +12700,7 @@ function initEventBindings(){
               var prevBtn2=document.createElement('button');
               prevBtn2.innerHTML='<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"15 18 9 12 15 6\"/></svg>';
               prevBtn2.disabled=(si2<=0);
-              prevBtn2.onclick=function(p,f,l,idx){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,idx-1);};}(curId,fpNum,childList,si2);
+              prevBtn2.onclick=function(p,f,targetId){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,targetId);};}(curId,fpNum,childList[si2-1]||null);
               nav2.appendChild(prevBtn2);
               var label2=document.createElement('span');
               label2.className='branch-label';
@@ -12708,7 +12709,7 @@ function initEventBindings(){
               var nextBtn2=document.createElement('button');
               nextBtn2.innerHTML='<svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><polyline points=\"9 18 15 12 9 6\"/></svg>';
               nextBtn2.disabled=(si2>=childList.length-1);
-              nextBtn2.onclick=function(p,f,l,idx){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,idx+1);};}(curId,fpNum,childList,si2);
+              nextBtn2.onclick=function(p,f,targetId){return function(e){e.stopPropagation();_switchBubbleBranch(p,f,targetId);};}(curId,fpNum,childList[si2+1]||null);
               nav2.appendChild(nextBtn2);
               fb2.appendChild(nav2);
             }
@@ -12719,29 +12720,20 @@ function initEventBindings(){
     }
   };
 
-  // ★ 气泡级分支切换
-  window._switchBubbleBranch=async function(parentId,forkPoint,targetSiblingIdx){
-    if(!currentConversationId)return;
+  // ★ 气泡级分支切换：直接接收目标branchId，不再依赖index查数组（避免for-in顺序不一致）
+  window._switchBubbleBranch=async function(parentId,forkPoint,targetBranchId){
+    if(!currentConversationId||!targetBranchId)return;
     var msgList=document.getElementById('messagesList');
     var bd=_getBranchData(currentConversationId);
+    if(!bd._branches[targetBranchId])return;
+    if(targetBranchId===bd._currentBranchId)return;
     bd._branches[bd._currentBranchId].items=_collectBubbles(msgList);
-    var siblings=[];
-    for(var bid in bd._branches){
-      if(!bd._branches.hasOwnProperty(bid))continue;
-      var sb=bd._branches[bid];
-      if(sb.parentId===parentId&&sb.forkPoint===forkPoint)siblings.push(bid);
-    }
-    if(siblings.indexOf(parentId)<0)siblings.push(parentId);
-    siblings.sort(function(a,b){return (bd._branchOrder.indexOf(a)||0)-(bd._branchOrder.indexOf(b)||0);});
-    if(targetSiblingIdx<0||targetSiblingIdx>=siblings.length)return;
-    var newBranchId=siblings[targetSiblingIdx];
-    if(newBranchId===bd._currentBranchId)return;
-    bd._currentBranchId=newBranchId;
+    bd._currentBranchId=targetBranchId;
     var bubbles=msgList.querySelectorAll('.message.user,.message.agent');
     for(var bi=bubbles.length-1;bi>forkPoint;bi--){
       if(bubbles[bi].parentNode)bubbles[bi].parentNode.removeChild(bubbles[bi]);
     }
-    var newItems=bd._branches[newBranchId].items||[];
+    var newItems=bd._branches[targetBranchId].items||[];
     for(var ni=forkPoint+1;ni<newItems.length;ni++){
       var nm=newItems[ni];
       if(nm.role==='user')addUserMessage(nm.content);
@@ -12767,26 +12759,29 @@ function initEventBindings(){
     _renderBubbleBranchNavs();
   };
 
-  // ★ 分叉核心：在当前分支的forkPoint处分叉 → 存DB → nav从<X/N>变<X+1/N+1> → 自动发送
-  window._forkAtForkPoint=async function(autoSendText){
+  // ★ 分叉核心：始终以当前DOM为基准，嵌套分叉（新分支=当前分支的子分支）
+  // forkIndex: 可选，强制指定fork点气泡索引（用于重新生成/从此处继续）
+  window._forkAtForkPoint=async function(autoSendText,forkIndex){
     var msgList=document.getElementById('messagesList');
     if(!msgList||!currentConversationId)return;
     var bd=_getBranchData(currentConversationId);
     var curId=bd._currentBranchId;
     var curBr=bd._branches[curId];
-    var fp=curBr.forkPoint;
-    var pid=curBr.parentId;
-    // 主分支无forkPoint：在最后一个用户气泡处fork
-    if(fp<0||!pid||!bd._branches[pid]){
-      var bubbles=Array.from(msgList.querySelectorAll('.message.user,.message.agent'));
+    // ★ 始终以当前DOM计算forkPoint，不再沿用curBr.forkPoint
+    var bubbles=Array.from(msgList.querySelectorAll('.message.user,.message.agent'));
+    var fp;
+    if(typeof forkIndex==='number'&&forkIndex>=0&&forkIndex<bubbles.length){
+      fp=forkIndex;
+    }else{
+      // 默认：最后一个用户气泡
       fp=bubbles.length-1;
       for(var fi=bubbles.length-1;fi>=0;fi--){if(bubbles[fi].classList.contains('user')){fp=fi;break;}}
-      pid=curId;
     }
+    // ★ 始终以当前分支为父（嵌套分叉），不再复用curBr.parentId
+    var pid=curId;
     // 保存旧分支items
     bd._branches[curId].items=_collectBubbles(msgList);
     // 删除forkPoint之后的DOM气泡
-    var bubbles=msgList.querySelectorAll('.message.user,.message.agent');
     for(var bi=bubbles.length-1;bi>fp;bi--){
       if(bubbles[bi].parentNode)bubbles[bi].parentNode.removeChild(bubbles[bi]);
     }
@@ -12812,7 +12807,7 @@ function initEventBindings(){
     }
   };
 
-  // ★ 重新生成：在当前分支的forkPoint处分叉+自动发送用户消息
+  // ★ 重新生成：以点击的agent气泡对应的user气泡索引作为forkPoint
   window._handleRegenerate=function(msgDiv){
     if(!confirm('将从此处重新生成一个新分支。确定？'))return;
     var msgList=document.getElementById('messagesList');
@@ -12821,14 +12816,16 @@ function initEventBindings(){
     var idx=bubbles.indexOf(msgDiv);
     if(idx<0)return;
     var userText='';
+    var userIdx=-1;
     for(var i=idx;i>=0;i--){
-      if(bubbles[i].classList.contains('user')){userText=(bubbles[i].querySelector('.message-content')||{}).textContent||'';break;}
+      if(bubbles[i].classList.contains('user')){userText=(bubbles[i].querySelector('.message-content')||{}).textContent||'';userIdx=i;break;}
     }
     if(!userText){showToast('未找到关联的用户消息','error');return;}
-    _forkAtForkPoint(userText);
+    // ★ 以用户气泡索引为fork点，agent气泡之后的内容会被截断
+    _forkAtForkPoint(userText,userIdx);
   };
 
-  // ★ 从此处继续：在当前分支的forkPoint处分叉+自动发送
+  // ★ 从此处继续：以点击气泡索引为forkPoint，保留到该气泡为止
   window._handleContinueFromHere=function(msgDiv){
     if(!confirm('将从此处创建新分支对话。确定？'))return;
     var msgList=document.getElementById('messagesList');
@@ -12836,12 +12833,8 @@ function initEventBindings(){
     var bubbles=Array.from(msgList.querySelectorAll('.message.user,.message.agent'));
     var idx=bubbles.indexOf(msgDiv);
     if(idx<0)return;
-    var userText='';
-    for(var i=idx;i>=0;i--){
-      if(bubbles[i].classList.contains('user')){userText=(bubbles[i].querySelector('.message-content')||{}).textContent||'';break;}
-    }
-    if(!userText){showToast('未找到关联的用户消息','error');return;}
-    _forkAtForkPoint(userText);
+    // ★ 以点击气泡自身索引为forkPoint，不再查找userText自动发送
+    _forkAtForkPoint(null,idx);
   };
 
 
