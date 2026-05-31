@@ -7094,7 +7094,7 @@ async function toolWordGenerator(args){
 }
 
 async function toolFuzzySearch(args){
-  var query=args.query,path=args.path||'/',limit=args.limit||10,targetFile=args.file||null;
+  var query=args.query,path=args.path?normalizePath(args.path):'/',limit=args.limit||10,targetFile=args.file?normalizePath(args.file):null;
   if(!query||!query.trim())throw new Error('搜索关键词不能为空');
   var files=await idbTransaction('files','readonly',function(store){return store.getAll();});
   var fileContents=[];
@@ -7105,7 +7105,7 @@ async function toolFuzzySearch(args){
     if(targetFile){
       if(f.path!==targetFile)continue;
     }else{
-      if(!f.path||f.path.indexOf(path)===-1)continue;
+      if(!f.path||f.path.indexOf(path)!==0)continue;
     }
     var content=f.content;
     if(f.compressed){
@@ -7135,7 +7135,7 @@ async function toolFuzzySearch(args){
       fileContents.push({name:f.path.split('/').pop()||f.path,path:f.path,content:snippet});
     }
   }
-  if(fileContents.length===0)return '在 '+path+' 路径下没有找到可搜索的文件（可能已被压缩或路径不匹配）。请先用 filesystem list '+path+' 查看目录内容。';
+  if(fileContents.length===0)return targetFile?'在文件 '+targetFile+' 中没有找到可搜索的内容（文件不存在或路径不匹配）。请先用 filesystem list 查看目录内容。':'在 '+path+' 路径下没有找到可搜索的文件（可能已被压缩或路径不匹配）。请先用 filesystem list '+path+' 查看目录内容。';
   var resp=await sendToTaskWorker('fuzzy_search',{query:query,files:fileContents,limit:limit});
   if(!resp||!resp.success||!resp.data)return '搜索未返回结果。';
   var results=resp.data;
