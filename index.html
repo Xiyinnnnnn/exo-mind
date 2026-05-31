@@ -427,6 +427,45 @@ input:checked+.toggle-slider::before{transform:translateX(22px)}
 .settings-section.collapsible .section-header .section-arrow.collapsed{
   transform:rotate(-90deg);
 }
+/* ===== 政策文件系统：文件卡片列表 ===== */
+.file-policy-list{display:flex;flex-direction:column;gap:6px}
+.file-policy-empty{text-align:center;padding:20px;color:#999;font-size:13px}
+.file-policy-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.file-policy-tag{padding:4px 10px;border-radius:14px;font-size:12px;border:1px solid var(--color-border);background:#fff;cursor:pointer;transition:all .2s;user-select:none;white-space:nowrap}
+.file-policy-tag:hover{background:#f0f4ff}
+.file-policy-tag.active{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+.file-policy-tag .count{margin-left:3px;opacity:.7;font-size:11px}
+.file-policy-search{display:flex;align-items:center;gap:6px;margin-bottom:10px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:6px 10px}
+.file-policy-search input{flex:1;border:none;outline:none;background:transparent;font-size:13px;font-family:inherit;color:var(--color-text)}
+.file-policy-search input::placeholder{color:#aaa}
+.file-policy-search svg{flex-shrink:0;color:#999}
+.file-policy-search .search-clear{display:none;width:20px;height:20px;border:none;background:#ddd;border-radius:50%;cursor:pointer;font-size:12px;line-height:1;align-items:center;justify-content:center;color:#666}
+.file-policy-group-title{font-size:12px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.5px;padding:6px 0 2px;margin-top:4px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:6px}
+.file-policy-group-title .group-count{font-weight:400;font-size:11px;color:#999}
+.file-policy-card{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);background:#fafbfc;border:1px solid transparent;transition:background .15s,border-color .15s;cursor:default}
+.file-policy-card:hover{background:#f0f4ff;border-color:#d4dfff}
+.file-policy-card .fp-icon{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+.file-policy-card .fp-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.file-policy-card .fp-name{font-size:13px;font-weight:500;color:var(--color-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3}
+.file-policy-card .fp-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.file-policy-card .fp-path{font-size:10px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+.file-policy-card .fp-badge{font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;flex-shrink:0}
+.fp-badge.policy{background:#fff3cd;color:#856404}
+.fp-badge.tech{background:#e8f0fe;color:#174ea6}
+.fp-badge.data{background:#e8f5e9;color:#1b5e20}
+.fp-badge.config{background:#f3e5f5;color:#6a1b9a}
+.fp-badge.image{background:#fce4ec;color:#880e4f}
+.fp-badge.other{background:#eceff1;color:#546e7a}
+.fp-badge.system{background:#ffebee;color:#b71c1c}
+.file-policy-card .fp-size{font-size:11px;color:var(--color-text-secondary);flex-shrink:0;white-space:nowrap}
+.file-policy-card .fp-date{font-size:10px;color:#bbb;flex-shrink:0;white-space:nowrap}
+.file-policy-card .fp-actions{display:flex;gap:2px;flex-shrink:0}
+.file-policy-card .fp-actions button{width:26px;height:26px;border:1px solid var(--color-border);background:#fff;border-radius:4px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all .15s;color:var(--color-text-secondary)}
+.file-policy-card .fp-actions button:hover{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+.file-policy-card .fp-actions button.fp-del:hover{background:var(--color-danger);border-color:var(--color-danger)}
+.file-policy-storage-bar{height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;margin:8px 0 4px}
+.file-policy-storage-bar .fill{height:100%;background:var(--color-primary);border-radius:3px;transition:width .5s}
+.file-policy-storage-label{font-size:11px;color:var(--color-text-secondary);display:flex;justify-content:space-between}
 /* 进度条 */
 .progress-bar{height:8px;background:#e9ecef;border-radius:4px;overflow:hidden;margin:4px 0}
 .progress-bar .fill{height:100%;background:var(--color-primary);border-radius:4px;transition:width .3s}
@@ -721,13 +760,35 @@ button,label,[role="button"],.file-upload-btn{
         <h3>📁 文件管理</h3><span class="section-arrow collapsed">▼</span>
       </div>
       <div class="section-body collapsed">
-        <div class="settings-field"><label>IndexedDB 用量</label><div id="storageInfo" style="font-size:13px">计算中...</div></div>
-        <div class="settings-field"><label>上传文件</label><div id="uploadedFilesList" style="font-size:12px;max-height:120px;overflow-y:auto"><em style="color:#999">暂无上传文件</em></div><button class="btn btn-outline btn-sm" id="btnClearUploads" style="margin-top:4px">清除全部上传文件</button></div>
-        <div class="settings-field"><button class="btn btn-outline btn-sm" id="btnClearCache" style="width:100%">🗑 清理模型缓存</button></div>
-        <div id="fileManagerList" style="font-size:12px;max-height:200px;overflow-y:auto;margin-top:8px"><em style="color:#999">点击按钮刷新文件列表</em></div>
-        <button class="btn btn-outline btn-sm" id="btnRefreshFiles" style="margin-top:6px;width:100%">🔄 刷新文件列表</button>
+        <!-- 存储用量条 -->
+        <div class="file-policy-storage-bar"><div class="fill" id="storageBarFill" style="width:0%"></div></div>
+        <div class="file-policy-storage-label"><span id="storageInfo">计算中...</span><span id="storageQuotaInfo"></span></div>
+        <!-- 操作按钮栏 -->
+        <div style="display:flex;gap:6px;margin:10px 0">
+          <button class="btn btn-outline btn-sm" id="btnRefreshFiles" style="flex:1">🔄 刷新</button>
+          <button class="btn btn-outline btn-sm" id="btnClearUploads" style="flex:1">🗑 清除上传</button>
+          <button class="btn btn-outline btn-sm" id="btnClearCache" style="flex:1">🧹 清缓存</button>
+        </div>
+        <!-- 搜索框 -->
+        <div class="file-policy-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="filePolicySearch" placeholder="搜索文件名或路径..." autocomplete="off">
+          <button class="search-clear" id="filePolicySearchClear" title="清除">✕</button>
+        </div>
+        <!-- 分类标签栏 -->
+        <div class="file-policy-tags" id="filePolicyTags">
+          <span class="file-policy-tag active" data-cat="all">📋 全部</span>
+          <span class="file-policy-tag" data-cat="policy">📜 政策文档</span>
+          <span class="file-policy-tag" data-cat="tech">💻 技术文件</span>
+          <span class="file-policy-tag" data-cat="data">📊 数据文件</span>
+          <span class="file-policy-tag" data-cat="config">⚙️ 配置</span>
+          <span class="file-policy-tag" data-cat="image">🖼️ 媒体</span>
+          <span class="file-policy-tag" data-cat="other">📎 其他</span>
+        </div>
+        <!-- 文件列表 -->
+        <div id="fileManagerList" class="file-policy-list"><em class="file-policy-empty">点击 🔄 刷新 加载文件列表</em></div>
         <div id="fileManagerHint" style="display:none;background:#fff3cd;padding:10px;border-radius:8px;font-size:12px;color:#856404;margin-top:8px">
-          ⚠️ 标注 <b>🔒</b> 的文件为系统文件，不可删除。用户生成文件可下载/删除。
+          ⚠️ 标注 <b>🔒</b> 的文件为系统文件，不可删除。
         </div>
       </div>
     </div>
@@ -11009,54 +11070,127 @@ async function handleFileUploads(files){
   }
 }
 
+
+// ===== 政策文件系统：文件分类 & 图标 =====
+function _classifyFile(path,name){
+  var p=(path||'').toLowerCase();
+  var n=(name||'').toLowerCase();
+  var ext=n.lastIndexOf('.')>=0?n.substring(n.lastIndexOf('.')):'';
+  var sysPrefixes=['/system/','/skills/','/cache/','/model_cache/','/evo/','/.trash/','/bin/'];
+  for(var si=0;si<sysPrefixes.length;si++){if(p.indexOf(sysPrefixes[si])===0)return{cat:'system',icon:'🔒',label:'系统'};}
+  if('.md.txt.pdf.docx.doc.pptx.epub'.indexOf(ext)>=0&&ext)return{cat:'policy',icon:'📜',label:'政策文档'};
+  if(p.indexOf('/docs/')>=0||p.indexOf('/policies/')>=0)return{cat:'policy',icon:'📜',label:'政策文档'};
+  if('.json.yaml.yml.toml.ini.cfg.env'.indexOf(ext)>=0&&ext)return{cat:'config',icon:'⚙️',label:'配置'};
+  if(p.indexOf('/config/')>=0)return{cat:'config',icon:'⚙️',label:'配置'};
+  if('.csv.xlsx.xls.ods.jsonl.log.sql.db.sqlite'.indexOf(ext)>=0&&ext)return{cat:'data',icon:'📊',label:'数据'};
+  if('.png.jpg.jpeg.gif.webp.bmp.svg.ico.mp4.mp3.wav.webm'.indexOf(ext)>=0&&ext)return{cat:'image',icon:'🖼️',label:'媒体'};
+  if('.js.ts.jsx.tsx.py.java.c.cpp.h.hpp.go.rs.rb.php.swift.kt.scala.r.m.lua.pl.tex.sh.bash.zsh.bat.ps1.html.htm.css.scss.less.xml'.indexOf(ext)>=0&&ext)return{cat:'tech',icon:'💻',label:'技术'};
+  return{cat:'other',icon:'📎',label:'其他'};
+}
+function _formatDate(ts){
+  if(!ts)return'';
+  var d=new Date(ts),now=new Date();
+  var pad=function(n){return n<10?'0'+n:''+n;};
+  if(d.toDateString()===now.toDateString())return pad(d.getHours())+':'+pad(d.getMinutes());
+  return (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function _updateFilePolicyTagCounts(counts){
+  var container=document.getElementById('filePolicyTags');
+  if(!container)return;
+  var tags=container.querySelectorAll('.file-policy-tag');
+  var total=0;
+  for(var k in counts){if(counts.hasOwnProperty(k))total+=counts[k];}
+  for(var ti=0;ti<tags.length;ti++){
+    var cat=tags[ti].getAttribute('data-cat');
+    var cnt=cat==='all'?total:(counts[cat]||0);
+    var existingCount=tags[ti].querySelector('.count');
+    if(existingCount)existingCount.remove();
+    if(cnt>0){var span=document.createElement('span');span.className='count';span.textContent=cnt;tags[ti].appendChild(span);}
+  }
+}
+var _activeFileCat='all';
+
+
 function renderUploadedFilesList(){
   var el=document.getElementById('uploadedFilesList');
   if(!el)return;
   if(uploadedFiles.length===0){
-    el.innerHTML='<em style="color:#999">暂无上传文件</em>';
+    el.innerHTML='<div class="file-policy-empty">暂无上传文件</div>';
     return;
   }
-  el.innerHTML=uploadedFiles.map(function(f){
-    return '<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;border-bottom:1px solid #eee">'+
-      '<span>'+escapeHtml(f.name)+'</span>'+
-      '<span>'+formatSize(f.size)+'</span>'+
-      '</div>';
-  }).join('');
+  var html='';
+  for(var i=0;i<uploadedFiles.length;i++){
+    var f=uploadedFiles[i];
+    var name=f.name||'unknown';
+    var cls=_classifyFile(f.path||'',name);
+    html+='<div class="file-policy-card">';
+    html+='<span class="fp-icon">📤</span>';
+    html+='<div class="fp-info">';
+    html+='<span class="fp-name">'+escapeHtml(name)+'</span>';
+    html+='<div class="fp-meta"><span class="fp-badge '+cls.cat+'">'+cls.label+'</span></div>';
+    html+='</div>';
+    html+='<span class="fp-size">'+formatSize(f.size||0)+'</span>';
+    html+='</div>';
+  }
+  el.innerHTML=html;
 }
 
-async function renderFileManager(){
+async function renderFileManager(filterCat,searchQuery){
   var container=document.getElementById('fileManagerList');
   var hint=document.getElementById('fileManagerHint');
   if(!container)return;
   try{
     var files=await idbTransaction('files','readonly',function(store){return store.getAll();});
-    if(!files||files.length===0){container.innerHTML='<em style="color:#999">暂无文件</em>';return;}
-    files.sort(function(a,b){return (b.updated||b.created||0)-(a.updated||a.created||0);});
-    var sysPrefixes=['/system/','/skills/','/cache/','/model_cache/','/evo/','/.','/bin/'];
-    var isSys=function(path){
-      if(!path)return false;
-      for(var i=0;i<sysPrefixes.length;i++){if(path.indexOf(sysPrefixes[i])===0)return true;}
-      return false;
-    };
-    var html='';
-    for(var fi=0;fi<files.length;fi++){
-      var f=files[fi];
-      if(f.content==='__DIR__')continue;
+    if(!files||files.length===0){container.innerHTML='<div class="file-policy-empty">📭 暂无文件</div>';_updateFilePolicyTagCounts({});return;}
+    files=files.filter(function(f){return f.content!=='__DIR__';});
+    files.sort(function(a,b){return (b.updated_at||b.created_at||0)-(a.updated_at||a.created_at||0);});
+    var enriched=files.map(function(f){
       var path=f.path||f.filename||'unknown';
       var name=path.split('/').pop()||path;
-      var size=f.size||(f.content?f.content.length:0);
-      var sys=isSys(path);
-      html+='<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #eee;font-size:12px">';
-      html+='<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(sys?'🔒 ':'')+escapeHtml(name)+'<span style="color:#999;font-size:10px"> ('+formatSize(size)+')</span></span>';
-      var escPath=path.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      html+='<button onclick="downloadFileByPath(\''+escPath+'\')" style="padding:2px 8px;font-size:11px;cursor:pointer;background:#4f6ef7;color:#fff;border:none;border-radius:4px">⬇</button>';
-      if(!sys)html+='<button onclick="deleteFileByPath(\''+escPath+'\',\''+name.replace(/'/g,"\\'")+'\')" style="padding:2px 8px;font-size:11px;cursor:pointer;background:#e74c3c;color:#fff;border:none;border-radius:4px">✕</button>';
-        html+='</div>';
+      var cls=_classifyFile(path,name);
+      var size=f.size||(f.content?(typeof f.content==='string'?f.content.length:f.content.size||0):0);
+      return{path:path,name:name,size:size,cat:cls.cat,icon:cls.icon,label:cls.label,updated:f.updated_at||f.created_at||0,isSystem:cls.cat==='system'};
+    });
+    var catCounts={};
+    for(var ei=0;ei<enriched.length;ei++){var c=enriched[ei].cat;catCounts[c]=(catCounts[c]||0)+1;}
+    _updateFilePolicyTagCounts(catCounts);
+    filterCat=filterCat||_activeFileCat||'all';
+    searchQuery=searchQuery||'';
+    if(filterCat!=='all'){enriched=enriched.filter(function(f){return f.cat===filterCat;});}
+    if(searchQuery){var q=searchQuery.toLowerCase();enriched=enriched.filter(function(f){return f.name.toLowerCase().indexOf(q)>=0||f.path.toLowerCase().indexOf(q)>=0;});}
+    if(enriched.length===0){container.innerHTML='<div class="file-policy-empty">📭 '+(searchQuery?'没有匹配 "'+escapeHtml(searchQuery)+'" 的文件':'该分类下暂无文件')+'</div>';return;}
+    var catOrder=['system','policy','config','data','tech','image','other'];
+    var catLabels={system:'🔒 系统文件',policy:'📜 政策文档',config:'⚙️ 配置文件',data:'📊 数据文件',tech:'💻 技术文件',image:'🖼️ 媒体文件',other:'📎 其他文件'};
+    var groups={};
+    for(var gi=0;gi<enriched.length;gi++){var gcat=enriched[gi].cat;if(!groups[gcat])groups[gcat]=[];groups[gcat].push(enriched[gi]);}
+    var html='';
+    for(var ci=0;ci<catOrder.length;ci++){
+      var catKey=catOrder[ci];
+      var group=groups[catKey];
+      if(!group||group.length===0)continue;
+      html+='<div class="file-policy-group-title">'+catLabels[catKey]+' <span class="group-count">'+group.length+'个</span></div>';
+      for(var fi=0;fi<group.length;fi++){
+        var f=group[fi];
+        var escPath=f.path.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        html+='<div class="file-policy-card'+(f.isSystem?' fp-system':'')+'">';
+        html+='<span class="fp-icon">'+f.icon+'</span>';
+        html+='<div class="fp-info">';
+        html+='<span class="fp-name" title="'+escapeHtml(f.path)+'">'+(f.isSystem?'🔒 ':'')+escapeHtml(f.name)+'</span>';
+        html+='<div class="fp-meta">';
+        html+='<span class="fp-path">'+escapeHtml(f.path)+'</span>';
+        html+='<span class="fp-badge '+f.cat+'">'+f.label+'</span>';
+        html+='</div></div>';
+        html+='<span class="fp-size">'+formatSize(f.size)+'</span>';
+        html+='<span class="fp-date">'+_formatDate(f.updated)+'</span>';
+        html+='<div class="fp-actions">';
+        html+='<button onclick="downloadFileByPath(\''+escPath+'\')" title="下载">⬇</button>';
+        if(!f.isSystem){html+='<button class="fp-del" onclick="deleteFileByPath(\''+escPath+'\',\''+f.name.replace(/'/g,"\\'")+'\')" title="删除">✕</button>';}
+        html+='</div></div>';
       }
-      container.innerHTML=html;
-
+    }
+    container.innerHTML=html;
     if(hint)hint.style.display='block';
-  }catch(e){container.innerHTML='<em style="color:#c0392b">加载失败: '+escapeHtml(e.message)+'</em>';}
+  }catch(e){container.innerHTML='<div class="file-policy-empty" style="color:#c0392b">加载失败: '+escapeHtml(e.message)+'</div>';}
 }
 	// 挂到全局以便 onclick 调用（用 path 而非 id，因 IndexedDB keyPath='path'）
 	window.downloadFileByPath=async function(filePath){
@@ -11094,6 +11228,7 @@ async function clearUploadedFiles(){
   }
   uploadedFiles=[];
   renderUploadedFilesList();
+  renderFileManager();
   showToast('上传文件已全部清除','info');
 }
 
@@ -11104,18 +11239,25 @@ async function clearUploadedFiles(){
 async function updateStorageInfo(){
   try{
     var allFiles=await idbTransaction('files','readonly',function(store){return store.getAll();});
+    // 排除 __DIR__ 目录标记，与卡片列表保持一致
+    var realFiles=allFiles.filter(function(f){return f.content!=='__DIR__';});
     var totalSize=0;
-    for(var fi=0;fi<allFiles.length;fi++){
-      if(allFiles[fi].size&&typeof allFiles[fi].size==='number')totalSize+=allFiles[fi].size;
+    for(var fi=0;fi<realFiles.length;fi++){
+      if(realFiles[fi].size&&typeof realFiles[fi].size==='number')totalSize+=realFiles[fi].size;
+      else if(realFiles[fi].content&&typeof realFiles[fi].content==='string')totalSize+=realFiles[fi].content.length;
     }
-    var totalCount=allFiles.length;
-    var el=document.getElementById('storageInfo');
-    if(el)el.textContent=totalCount+' 个文件，共 '+formatSize(totalSize);
+    var totalCount=realFiles.length;
+    var infoEl=document.getElementById('storageInfo');
+    if(infoEl)infoEl.textContent=totalCount+' 个文件，共 '+formatSize(totalSize);
+    var barFill=document.getElementById('storageBarFill');
+    var quotaEl=document.getElementById('storageQuotaInfo');
     if(navigator.storage&&navigator.storage.estimate){
       try{
         var estimate=await navigator.storage.estimate();
         var used=estimate.usage||0;
         var quota=estimate.quota||0;
+        if(barFill&&quota>0)barFill.style.width=Math.min(100,Math.round(used/quota*100))+'%';
+        if(quotaEl)quotaEl.textContent=formatSize(used)+' / '+formatSize(quota);
         if(quota-used<10*1024*1024){
           errorHandler.handle({code:'STORAGE_QUOTA',message:'存储配额即将用尽: '+formatSize(used)+'/'+formatSize(quota)});
         }
@@ -12169,7 +12311,43 @@ function initEventBindings(){
   if(btnClearLogs)btnClearLogs.addEventListener('click',function(){debugLogger.clear();});
   // 文件管理器按钮
   var btnRefreshFiles=document.getElementById('btnRefreshFiles');
-  if(btnRefreshFiles)btnRefreshFiles.addEventListener('click',renderFileManager);
+  if(btnRefreshFiles)btnRefreshFiles.addEventListener('click',function(){renderFileManager();renderUploadedFilesList();updateStorageInfo();});
+
+  // 文件搜索
+  var filePolicySearch=document.getElementById('filePolicySearch');
+  var filePolicySearchClear=document.getElementById('filePolicySearchClear');
+  var _fileSearchTimer=null;
+  if(filePolicySearch){
+    filePolicySearch.addEventListener('input',function(){
+      var q=this.value.trim();
+      if(filePolicySearchClear)filePolicySearchClear.style.display=q?'flex':'none';
+      clearTimeout(_fileSearchTimer);
+      _fileSearchTimer=setTimeout(function(){renderFileManager(_activeFileCat,q);},250);
+    });
+  }
+  if(filePolicySearchClear){
+    filePolicySearchClear.addEventListener('click',function(){
+      var input=document.getElementById('filePolicySearch');
+      if(input){input.value='';input.focus();}
+      this.style.display='none';
+      renderFileManager(_activeFileCat,'');
+    });
+  }
+
+  // 分类标签
+  var filePolicyTags=document.getElementById('filePolicyTags');
+  if(filePolicyTags){
+    filePolicyTags.addEventListener('click',function(e){
+      var tag=e.target.closest('.file-policy-tag');
+      if(!tag)return;
+      var allTags=filePolicyTags.querySelectorAll('.file-policy-tag');
+      for(var ti=0;ti<allTags.length;ti++)allTags[ti].classList.remove('active');
+      tag.classList.add('active');
+      _activeFileCat=tag.getAttribute('data-cat')||'all';
+      var sq=document.getElementById('filePolicySearch');
+      renderFileManager(_activeFileCat,sq?sq.value.trim():'');
+    });
+  }
   var logLevel=document.getElementById('logLevel');
   if(logLevel)logLevel.addEventListener('change',function(){debugLogger.setLevel(this.value.toUpperCase());});
 
