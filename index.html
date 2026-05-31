@@ -8566,11 +8566,36 @@ async function _subAgentLLM(systemPrompt,userPrompt,toolsWhitelist,temperature,t
     }
     if(choice.finish_reason==='stop'||choice.finish_reason==='length')break;
   }
-  return {content:output,messages:msgs,turns:usedTurns};
+  	return {content:output,messages:msgs,turns:usedTurns};
+}
+
+// ===== 收集子Agent通过filesystem写入的文件路径 =====
+function _collectWrittenFiles(messages,nodeState){
+	if(!messages||!messages.length||!nodeState)return;
+	if(!nodeState._writtenFiles)nodeState._writtenFiles=[];
+	var _wfSeen={};
+	for(var fi=0;fi<nodeState._writtenFiles.length;fi++)_wfSeen[nodeState._writtenFiles[fi]]=true;
+	for(var mi=0;mi<messages.length;mi++){
+		var m=messages[mi];
+		if(m.role==='assistant'&&m.tool_calls){
+			for(var ti=0;ti<m.tool_calls.length;ti++){
+				var tc=m.tool_calls[ti];
+				if(tc.function&&tc.function.name==='filesystem'){
+					try{
+						var fa=JSON.parse(tc.function.arguments);
+						if((fa.action==='create'||fa.action==='update'||fa.action==='append')&&fa.path&&!_wfSeen[fa.path]){
+							_wfSeen[fa.path]=true;nodeState._writtenFiles.push(fa.path);
+						}
+					}catch(e){}
+				}
+			}
+		}
+	}
 }
 
 // ===== 执行单个Agent节点（含内置critique_loop） =====
 async function _execAgentNode(nodeDef,state,def,runId,nodeId){
+
   var cfg=nodeDef.agent_config||{};
   var inputCtx=_resolveBindings(nodeDef.input_bindings,state,runId);
   var ns=state.node_states[nodeId];
@@ -8583,6 +8608,8 @@ async function _execAgentNode(nodeDef,state,def,runId,nodeId){
   var result=await _subAgentLLM(cfg.system_prompt,userPrompt,cfg.tools||[],cfg.temperature||0.7,cfg.top_p||0.9,cfg.max_turns||100,nodeId,runId);
   await _wtTrace(runId,nodeId,'round_0_draft.json',result.content);
   await _wtTrace(runId,nodeId,'input.json',userPrompt);
+  // ★ 记录子Agent通过filesystem写入的文件路径，供下游evaluation节点读取
+  _collectWrittenFiles(result.messages,ns);
 
   var cl=nodeDef.critique_loop;
   if(!cl||!cl.enabled){
@@ -8703,8 +8730,53 @@ async function _execParallelGroup(nodeDef,state,def,runId,nodeId){
 // ===== 评估节点 =====
 async function _execEvalNode(nodeDef,state,def,runId,nodeId){
   var targetId=nodeDef.evaluate_node;
-  var targetOutput=state.node_states[targetId]?state.node_states[targetId].output:null;
-  if(!targetOutput)return {passed:false,score:0,reason:'no_target_output'};
+  var targetNs=state.node_states[targetId];
+  var targetOutput=targetNs?targetNs.output:null;
+
+  // ★★★ 智能收集被评估节点的实际产出 ★★★
+  // agent通过filesystem写文件时output可能只是{"status":"done"}（<200字符壳）
+  // 评估节点必须主动挖掘真实产出文件
+  var _evalContent='';
+  if(targetOutput!==null&&targetOutput!==undefined){
+    _evalContent=typeof targetOutput==='string'?targetOutput:JSON.stringify(targetOutput);
+  }
+
+  if(_evalContent.length<200){
+    var _extra='';
+
+    // 1）读取被评估节点通过filesystem写入的文件（路径由_execAgentNode记录在_writtenFiles）
+    if(targetNs&&targetNs._writtenFiles&&targetNs._writtenFiles.length){
+      for(var fi=0;fi<targetNs._writtenFiles.length&&!_extra;fi++){
+        try{
+          var _fc=await readFile(targetNs._writtenFiles[fi]);
+          if(_fc&&_fc.length>_evalContent.length)_extra='\n\n--- 产出文件: '+targetNs._writtenFiles[fi]+' ---\n'+_fc;
+        }catch(e){}
+      }
+    }
+
+    // 2）读取持久化output中的raw字段
+    if(!_extra){
+      try{
+        var _po=await readFile('/pipelines/'+runId+'/outputs/'+targetId+'.json');
+        if(_po){
+          try{var _poj=JSON.parse(_po);if(_poj.raw&&_poj.raw.length>_evalContent.length)_extra=_poj.raw;}
+          catch(e2){if(_po.length>_evalContent.length)_extra=_po;}
+        }
+      }catch(e3){}
+    }
+
+    // 3）读取trace draft
+    if(!_extra){
+      try{
+        var _td=await readFile('/pipelines/'+runId+'/traces/'+targetId+'/round_0_draft.json');
+        if(_td&&_td.length>_evalContent.length)_extra=_td;
+      }catch(e4){}
+    }
+
+    if(_extra){_evalContent=_evalContent+_extra;}
+  }
+
+  if(!_evalContent)return {passed:false,score:0,reason:'no_target_output'};
 
   var rules=nodeDef.evaluation_rules||[];
   var totalScore=0,totalWeight=0,details=[];
@@ -8712,7 +8784,7 @@ async function _execEvalNode(nodeDef,state,def,runId,nodeId){
     var rule=rules[i],w=rule.weight||1;
     try{
       // ★ 强制结构化评分：四个维度独立打分
-      var ep='## 评分规则\n'+rule.prompt+'\n\n## 评分标准(0-1)\n- 0.0-0.3: 严重不符,有错误或完全偏离\n- 0.4-0.6: 部分符合,但有明显缺陷\n- 0.7-0.8: 基本符合,小问题\n- 0.9-1.0: 完全符合,高质量\n\n## 待评估内容\n'+JSON.stringify(targetOutput).substring(0,4000)+'\n\n## 输出\n必须输出JSON,score必须是真实评分,不能总是给0.7: {"score":0.42,"passed":false,"issues":["具体问题1"],"suggestion":"改进建议"}';
+      var ep='## 评分规则\n'+rule.prompt+'\n\n## 评分标准(0-1)\n- 0.0-0.3: 严重不符,有错误或完全偏离\n- 0.4-0.6: 部分符合,但有明显缺陷\n- 0.7-0.8: 基本符合,小问题\n- 0.9-1.0: 完全符合,高质量\n\n## 待评估内容\n'+_evalContent.substring(0,4000)+'\n\n## 输出\n必须输出JSON,score必须是真实评分,不能总是给0.7: {"score":0.42,"passed":false,"issues":["具体问题1"],"suggestion":"改进建议"}';
       var er=await _subAgentLLM('你是极严格的评估员。99%的产出有缺陷,真实评分应在0.3-0.7之间。只输出JSON。',ep,[],0.1,0.5,2,nodeId+'_eval',runId);
       var sc=null,passed=false,issues=[];
       try{var ej=JSON.parse(er.content);sc=ej.score;passed=ej.passed;issues=ej.issues||[];}catch(e){
