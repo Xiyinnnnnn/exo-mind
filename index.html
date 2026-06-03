@@ -1288,21 +1288,24 @@ parameters:{type:'object',properties:{expression:{type:'string',description:'数
   'pipeline':{name:'pipeline',description:`🏭 流水线引擎V5。
 
 ## action
-create 构建DAG并保存定义
-run pipeline_id + 可选run_id 阻塞等待，报告门触发/完成/失败时返回
-status run_id 查看节点进度和状态
-get_report run_id 获取当前报告门详情
-decide run_id decision="approve|revise|reroute|abort" + decision_detail 决策
-pause/resume/stop run_id 流程控制（暂停/恢复后需重新run阻塞等待）
-checkpoint run_id 手动创建检查点 → /pipelines/{run_id}/checkpoints/
+create  构建DAG并保存定义（禁止同名覆盖，用overwrite重写）
+update  pipeline_id + dag/name/description 修改已存在定义（合并式更新）
+overwrite  pipeline_id + dag/name/description 完全替换定义（等同先delete再create）
+delete  pipeline_id 删除流水线定义（不删除历史运行实例）
+run     pipeline_id + 可选run_id 阻塞等待，报告门触发/完成/失败时返回
+status  run_id 查看节点进度和状态
+get_report  run_id 获取当前报告门详情
+decide  run_id decision="approve|revise|reroute|abort" + decision_detail 决策
+pause/resume/stop  run_id 流程控制（暂停/恢复后需重新run阻塞等待）
+checkpoint  run_id 手动创建检查点 → /pipelines/{run_id}/checkpoints/
 restore run_id checkpoint_id 从文件恢复已完成节点，仅执行pending
-list 列出所有已保存定义
+list  列出所有已保存定义
 deliver run_id 收集全部产出 → /pipelines/{run_id}/delivery/
 
 ## 节点定义 (dag.nodes.{nid})
 {
   name:"显示名",
-  type:"agent|parallel_group|report_gate|evaluation|test_gate|assembly",
+  type:"agent|parallel_group|report_gate|evaluation|test_gate|assembly|loop|sub_pipeline|transform",
   // --- agent专属 ---
   agent_config:{temperature:0.7,top_p:0.9,system_prompt:"...",tools:["search","filesystem"],max_turns:5},
   input_bindings:{"key":"$ctx.path"|"$node.upstream_nid.output"},
@@ -1323,13 +1326,35 @@ deliver run_id 收集全部产出 → /pipelines/{run_id}/delivery/
   sources:["nid1","nid2"],
   verify_cross:true,
   merge_strategy:"best_parts|voting|weighted",
-  min_weight:0.3                // weighted策略排除阈值
+  min_weight:0.3,               // weighted策略排除阈值
+  // --- transform专属 ---
+  transform_expr:"$|$.field|[$]/[*]/[?cond]|[s:e]|{k:v}|sort_by(@,&f)",
+  // ★ 纯函数,<50ms,无IO/LLM/随机数. $=input_bindings解析后的完整对象.
+  // 例如 input_bindings:{"x":"$node.A.output"} → $={x:{output:{title:"...",items:[...]}}}
+  // 此时路径是 $.x.output.title 或 $.x.output.items[0] , 不是 $.output.title
+  // 裸字段名 field.sub 等效 $.field.sub (自动补$)
+  // 语法: 字段$.a.b | 索引arr[0]/arr[-1] | 投影arr[*] | 过滤[?score>=0.8&&status=="ok"]
+  //       多选{k1:$.f1,k2:$.f2} | 管道a|b|c | 默认值$.x||"fallback"
+  //       切片str[0:50]/arr[-3:] (支持字符串) | 排序sort_by(@,&f)/sort_by(@,&f desc)
+  //       desc不是独立关键字,只是sort_by上下文中的修饰词,也可作字段名:sort_by(@,&desc desc)
+  // --- loop专属 ---
+  children:["body_nid1","body_nid2"],  // 循环体内节点ID列表(支持嵌套)
+  max_iterations:10,                   // 最大迭代次数上限(防死循环)
+  exit_condition:"score >= 0.8 && issues <= 1", // 退出条件(支持复合表达式)
+  iteration_var:"i",                   // 可在input_bindings中用 $loop.i 引用
+  // --- sub_pipeline专属 ---
+  pipeline_id:"pipe_xxx",              // 引用已存在的流水线ID
 }
 
 ## 条件边 (dag.edges)
-每条边: {from:"nid",to:"nid",condition:"表达式"}
+每条边: {from:"nid",to:"nid",condition:"表达式",route_id:"路由组ID",default:true|false,on_error:true|false}
 - condition可省略(无条件边)
-- 表达式语法: "字段名 运算符 值"  例: "score >= 0.8" "passed == true"
+- on_error:true 表示该边仅在from节点失败时激活(降级/错误分支), 正常完成不走
+- 表达式语法(V6复合): "score >= 0.8 && completeness > 0.7"
+  例: "passed == true || confidence > 0.9"
+  例: "!(status == \"error\") && coverage >= 0.5"
+  例: "(a >= 0.8 || b >= 0.9) && c == true"
+  运算符: >= <= > < == !=    逻辑: && || ! ()
 
 ### ★ 字段自动递归查找（无需记前缀!）
   系统会递归搜索 ns → ns.output → ns.metrics → ns.output.output → 各子对象
@@ -1369,7 +1394,7 @@ deliver run_id 收集全部产出 → /pipelines/{run_id}/delivery/
 
 ## 持久化
 /pipelines/{run_id}/state.json traces/{nid}/round_N_*.json outputs/{nid}.json reports/{gate_id}.json checkpoints/{ckpt_id}.json`,executor:'main_thread',
-    parameters:{type:'object',properties:{action:{type:'string',enum:['create','run','status','get_report','decide','pause','resume','stop','checkpoint','restore','list','deliver']},name:{type:'string',description:'流水线名称(create)'},description:{type:'string'},project_id:{type:'string'},dag:{type:'object',description:'{nodes:{nid:{name,type,agent_config:{temperature,top_p,system_prompt,tools,max_turns},input_bindings,output_schema,critique_loop:{enabled,max_rounds,critique_prompt,revision_prompt,pass_threshold},children,strategy,concurrency,evaluate_node,evaluation_rules,max_retries,report_scope,report_to_main,sources,verify_cross,merge_strategy,min_weight}},edges:[{from,to,condition,route_id,default}]}'},acceptance_metrics:{type:'array',items:{type:'string'}},pipeline_id:{type:'string'},run_id:{type:'string'},context:{type:'object',description:'初始上下文(含开发文档全文)'},report_node_id:{type:'string'},decision:{type:'string',enum:['approve','revise','reroute','abort','retry']},decision_detail:{type:'object',description:'reroute:{add_nodes,modify_nodes(含input_bindings),reroute_edges,remove_edges}|revise:{revise_nodes,revision_instructions}'},checkpoint_id:{type:'string'}},required:['action']}},
+    parameters:{type:'object',properties:{action:{type:'string',enum:['create','update','overwrite','delete','run','status','get_report','decide','pause','resume','stop','checkpoint','restore','list','deliver']},name:{type:'string',description:'流水线名称(create)'},description:{type:'string'},project_id:{type:'string'},dag:{type:'object',description:'{nodes:{nid:{name,type,agent_config:{temperature,top_p,system_prompt,tools,max_turns},input_bindings,output_schema,critique_loop:{enabled,max_rounds,critique_prompt,revision_prompt,pass_threshold},children,strategy,concurrency,evaluate_node,evaluation_rules,max_retries,report_scope,report_to_main,sources,verify_cross,merge_strategy,min_weight}},edges:[{from,to,condition,route_id,default}]}'},acceptance_metrics:{type:'array',items:{type:'string'}},pipeline_id:{type:'string'},run_id:{type:'string'},context:{type:'object',description:'初始上下文(含开发文档全文)'},report_node_id:{type:'string'},decision:{type:'string',enum:['approve','revise','reroute','abort','retry']},decision_detail:{type:'object',description:'reroute:{add_nodes,modify_nodes(含input_bindings),reroute_edges,remove_edges}|revise:{revise_nodes,revision_instructions}'},checkpoint_id:{type:'string'}},required:['action']}},
 
   'reqalign':{name:'reqalign',description:'需求对齐工具。action=analyze(LLM分析需求模糊维度) submit_questions(提交问卷) check_convergence(LLM评估6维度收敛度:受众/格式/边界/验收/约束/矛盾) generate_confirmation(生成确认书) lock(锁定需求) status。持久化到/projects/{id}/requirements/',executor:'main_thread',
     parameters:{type:'object',properties:{action:{type:'string',enum:['analyze','submit_questions','check_convergence','generate_confirmation','lock','status']},project_id:{type:'string',description:'项目ID'},user_request:{type:'string',description:'用户原始需求(analyze用)'},questions:{type:'array',items:{type:'object',properties:{id:{type:'string'},question:{type:'string'},type:{type:'string',enum:['choice','text','confirm']},options:{type:'array',items:{type:'string'}}}},description:'澄清问卷数组(submit_questions用)'},user_answers:{type:'object',description:'用户对问题的回答(check_convergence用)'},confirmation_text:{type:'string',description:'需求确认书Markdown全文(generate_confirmation用)'}},required:['action']}},
@@ -8670,93 +8695,134 @@ function _topoSort(edges,nodeIds){
   return result;
 }
 
+// V6: _findReady — 支持 on_error 降级边 + failed 状态路由
 function _findReady(dag,state,topo){
   var ready=[],edges=dag.edges||[];
   for(var i=0;i<topo.length;i++){
     var nid=topo[i],ns=state.node_states[nid];
     if(!ns||ns._removedBy||ns.status==='removed'||ns.status==='routed_out'||(ns.status!=='pending'&&ns.status!=='needs_revision'))continue;
-    var allDepDone=true,condResults=[];
+    var allDepDone=true,condResults=[],
+        _hasOnErrorPath=false,_errorRouted=false;
     for(var j=0;j<edges.length;j++){
-      if(edges[j].to===nid){
-        var fs=state.node_states[edges[j].from];
-        if(!fs||(fs.status!=='completed'&&fs.status!=='skipped'&&fs.status!=='routed_out')){allDepDone=false;break;}
-        if(edges[j].condition){
-          var _evalR=_evalEdge(edges[j].condition,fs,true);
-          condResults.push({from:edges[j].from,condition:edges[j].condition,result:_evalR.passed,detail:_evalR.detail});
-          if(!_evalR.passed)allDepDone=false;
-        }
+      if(edges[j].to!==nid)continue;
+      var fs=state.node_states[edges[j].from];
+      if(!fs)continue;
+      // ★ V6: on_error 边 — 仅上游失败时激活
+      if(edges[j].on_error){
+        if(fs.status==='failed'||fs.status==='failed_with_fallback'){
+          _hasOnErrorPath=true;_errorRouted=true;
+          condResults.push({from:edges[j].from,condition:'🛡️on_error',result:true,detail:'错误降级激活'});
+          continue;
+        }else if(fs.status==='completed'||fs.status==='skipped'||fs.status==='routed_out'){
+          continue; // 上游正常 → on_error边不激活，也不阻塞
+        }else{allDepDone=false;break;} // 上游还在跑
+      }
+      // ★ V6: 上游failed但没有on_error连到当前节点 → 阻塞
+      if(fs.status==='failed'||fs.status==='failed_with_fallback'){
+        var _foundErrRoute=false;
+        for(var k=0;k<edges.length;k++){if(edges[k].from===edges[j].from&&edges[k].to===nid&&edges[k].on_error){_foundErrRoute=true;break;}}
+        if(!_foundErrRoute){allDepDone=false;break;}
+        continue;
+      }
+      // 正常：上游未完成 → 阻塞
+      if(fs.status!=='completed'&&fs.status!=='skipped'&&fs.status!=='routed_out'){allDepDone=false;break;}
+      // 正常条件边
+      if(edges[j].condition){
+        var _evalR=_evalEdge(edges[j].condition,fs,true);
+        condResults.push({from:edges[j].from,condition:edges[j].condition,result:_evalR.passed,detail:_evalR.detail});
+        if(!_evalR.passed)allDepDone=false;
       }
     }
     if(!allDepDone){
-      // ★ 记录被哪条条件边阻塞
       var _blocked=condResults.filter(function(c){return!c.result;});
       if(_blocked.length){ns._condTrace=_blocked;ns.status='skipped_by_cond';ns.completed_at=Date.now();debugLogger.info('⏭️ 条件阻塞跳过: '+nid+' | '+_blocked.map(function(b){return b.condition+'→false';}).join(', '));}
       continue;
     }
+    if(_errorRouted){ns._errorFallback=true;debugLogger.info('🛡️ 错误降级激活: '+nid);}
     ready.push(nid);
   }
   return ready;
 }
 
+// ===== V6 复合条件表达式求值（&& || ! () 递归下降） =====
 function _evalEdge(cond,ns,_trace){
-  if(!cond)return {passed:true,detail:'无条件'};
+  if(!cond)return _buildResult(true,'无条件',_trace);
   var _asBool=!_trace;
+  // ★ V6: 检测复合表达式 (含 && || ! ( ) )
+  var _isCompound=/[&|!()]/.test(cond)&&/&&|\|\||[()]/.test(cond);
+  if(!_isCompound){return _evalAtomic(cond,ns,_asBool);}
+  // ★ V6: Tokenize + 递归下降（优先级: ! > && > ||）
+  try{
+    var tokens=_tokenizeCond(cond),idx=0;
+    function _parseOr(){
+      var left=_parseAnd();
+      while(idx<tokens.length&&tokens[idx]==='||'){idx++;var right=_parseAnd();left={passed:left.passed||right.passed,detail:'('+left.detail+' || '+right.detail+')'};}
+      return left;
+    }
+    function _parseAnd(){
+      var left=_parseNot();
+      while(idx<tokens.length&&tokens[idx]==='&&'){idx++;var right=_parseNot();left={passed:left.passed&&right.passed,detail:'('+left.detail+' && '+right.detail+')'};}
+      return left;
+    }
+    function _parseNot(){
+      if(tokens[idx]==='!'){idx++;var inner=_parseNot();return {passed:!inner.passed,detail:'!('+inner.detail+')'};}
+      if(tokens[idx]==='('){idx++;var inner=_parseOr();if(tokens[idx]===')')idx++;return inner;}
+      var atomExpr=tokens[idx];idx++;
+      return _evalAtomic(atomExpr,ns,false);
+    }
+    var result=_parseOr();
+    return _buildResult(result.passed,'(λ) '+cond+' → '+result.passed+' | '+result.detail,_trace);
+  }catch(e){
+    return _buildResult(true,'(λ) 复合解析失败放行: '+cond+' | '+e.message,_trace);
+  }
+}
+function _buildResult(passed,detail,_trace){if(!_trace)return passed;return {passed:passed,detail:detail};}
+
+// V6: Tokenizer — 切分 && || ! ( )  + 原子表达式
+function _tokenizeCond(cond){
+  var tokens=[],i=0;
+  while(i<cond.length){
+    if(cond[i]===' '||cond[i]==='\t'){i++;continue;}
+    if(cond.substr(i,2)==='&&'){tokens.push('&&');i+=2;continue;}
+    if(cond.substr(i,2)==='||'){tokens.push('||');i+=2;continue;}
+    if(cond[i]==='!'){tokens.push('!');i++;continue;}
+    if(cond[i]==='('){tokens.push('(');i++;continue;}
+    if(cond[i]===')'){tokens.push(')');i++;continue;}
+    var start=i;
+    while(i<cond.length&&cond.substr(i,2)!=='&&'&&cond.substr(i,2)!=='||'&&cond[i]!==')'){
+      if(cond[i]==='"'||cond[i]==="'"){var q=cond[i];i++;while(i<cond.length&&cond[i]!==q)i++;if(i<cond.length)i++;}
+      else{i++;}
+    }
+    var atom=cond.substring(start,i).trim();
+    if(atom)tokens.push(atom);
+  }
+  return tokens;
+}
+
+// V6: 原子条件求值（原 _evalEdge 核心逻辑，逻辑不变）
+function _evalAtomic(cond,ns,_asBool){
   var m=cond.match(/^([\w.]+)\s*([<>=!]+)\s*(.+)$/);
-  if(!m){var _r={passed:true,detail:'(λ) 解析失败放行: '+cond};return _asBool?true:_r;}
+  if(!m){return _asBool?true:{passed:true,detail:'(λ) 解析失败放行: '+cond};}
   var field=m[1],op=m[2],rhs=m[3].replace(/^['"]|['"]$/g,'').trim();
-  // ★ 深度递归查找: 遍历 ns → ns.output → ns.metrics → ns.output.output → 各子对象
   function _deepFind(obj,path,depth){
     if(obj===null||obj===undefined||typeof obj!=='object'||depth>4)return undefined;
     var v=_resolveDotPath(obj,path);
     if(v!==undefined&&v!==null&&typeof v!=='object')return v;
-    if(v!==undefined&&v!==null&&typeof v==='object'){
-      var sv=v.score||v.value||v.passed;
-      if(sv!==undefined)return sv;
-      return v;
-    }
+    if(v!==undefined&&v!==null&&typeof v==='object'){var sv=v.score||v.value||v.passed;if(sv!==undefined)return sv;return v;}
     var keys=Object.keys(obj);
-    for(var i=0;i<keys.length;i++){
-      var sub=obj[keys[i]];
-      if(typeof sub==='object'&&sub!==null){
-        var r=_deepFind(sub,path,depth+1);
-        if(r!==undefined)return r;
-      }
-    }
+    for(var i=0;i<keys.length;i++){var sub=obj[keys[i]];if(typeof sub==='object'&&sub!==null){var r=_deepFind(sub,path,depth+1);if(r!==undefined)return r;}}
     return undefined;
   }
   var v=_deepFind(ns,field,0);
-  // 兜底: 去掉 output./metrics. 前缀重试
-  if(v===undefined){
-    var _sfield=field.replace(/^(output|metrics)\./,'');
-    if(_sfield!==field)v=_deepFind(ns,_sfield,0);
-  }
-  if(v===undefined||v===null){
-    var _ctx=JSON.stringify((ns.output||ns.metrics||{})).substring(0,120);
-    var _r2={passed:false,detail:'(λ) 字段缺失: '+field+' (已递归搜索ns全部子对象, 可用: '+_ctx};
-    return _asBool?false:_r2;
-  }
-  var _rawV=v;
-  if(typeof v==='object')v=v.score||v.value||v.passed||v;
-  if(op==='=='||op==='!='){
-    var _sv=String(v),_eq=_sv===rhs||_sv.toLowerCase()===rhs.toLowerCase();
-    if(_rawV===true&&(rhs==='true'||rhs==='1'))_eq=true;
-    if(_rawV===false&&(rhs==='false'||rhs==='0'))_eq=true;
-    var _result=op==='=='?_eq:!_eq;
-    if(_asBool)return _result;
-    return {passed:_result,detail:'(λ) '+field+'='+JSON.stringify(_rawV).substring(0,50)+' '+op+' '+rhs+'→'+_result};
-  }
-  var nv=parseFloat(rhs);
-  if(isNaN(nv)){var _r3={passed:false,detail:'(λ) 右值非数字: '+rhs};return _asBool?false:_r3;}
+  if(v===undefined){var _sfield=field.replace(/^(output|metrics)\./,'');if(_sfield!==field)v=_deepFind(ns,_sfield,0);}
+  if(v===undefined||v===null){var _ctx=JSON.stringify((ns.output||ns.metrics||{})).substring(0,120);return _asBool?false:{passed:false,detail:'(λ) 字段缺失: '+field+' (已递归搜索ns全部子对象, 可用: '+_ctx};}
+  var _rawV=v;if(typeof v==='object')v=v.score||v.value||v.passed||v;
+  if(op==='=='||op==='!='){var _sv=String(v),_eq=_sv===rhs||_sv.toLowerCase()===rhs.toLowerCase();if(_rawV===true&&(rhs==='true'||rhs==='1'))_eq=true;if(_rawV===false&&(rhs==='false'||rhs==='0'))_eq=true;var _result=op==='=='?_eq:!_eq;if(_asBool)return _result;return {passed:_result,detail:field+'='+JSON.stringify(_rawV).substring(0,50)+' '+op+' '+rhs+'→'+_result};}
+  var nv=parseFloat(rhs);if(isNaN(nv)){return _asBool?false:{passed:false,detail:'(λ) 右值非数字: '+rhs};}
   var _numResult;
-  switch(op){
-    case'>=':_numResult=Number(v)>=nv;break;
-    case'<=':_numResult=Number(v)<=nv;break;
-    case'>':_numResult=Number(v)>nv;break;
-    case'<':_numResult=Number(v)<nv;break;
-    default:{var _r4={passed:true,detail:'(λ) 未知操作符放行: '+op};return _asBool?true:_r4;}
-  }
+  switch(op){case'>=':_numResult=Number(v)>=nv;break;case'<=':_numResult=Number(v)<=nv;break;case'>':_numResult=Number(v)>nv;break;case'<':_numResult=Number(v)<nv;break;default:return _asBool?true:{passed:true,detail:'(λ) 未知操作符放行: '+op};}
   if(_asBool)return _numResult;
-  return {passed:_numResult,detail:'(λ) '+field+'='+v+' '+op+' '+rhs+'→'+_numResult};
+  return {passed:_numResult,detail:field+'='+v+' '+op+' '+rhs+'→'+_numResult};
 }
 
 
@@ -8765,6 +8831,7 @@ function _resolveRoutes(def,state,nodeId){
   var edges=def.dag.edges||[];
   var routeGroups={};
   for(var i=0;i<edges.length;i++){
+    if(edges[i].on_error)continue; // ★ V6: on_error边不参与正常路由
     if(edges[i].from===nodeId&&edges[i].route_id){
       var gid=edges[i].route_id;
       if(!routeGroups[gid])routeGroups[gid]=[];
@@ -9234,6 +9301,236 @@ async function _execAssemblyNode(nodeDef,state,def,runId,nodeId){
   return {status:'merged',result:merged,sources:Object.keys(srcOutputs),selected:selectedSources,cross_issues:crossIssues,strategy:strategy};
 }
 
+// ===== V6: Loop 循环节点 =====
+// children: 循环体内节点ID列表, max_iterations: 上限, exit_condition: 复合表达式
+async function _execLoopNode(nodeDef,state,def,runId,nodeId){
+  var children=nodeDef.children||[],maxIter=nodeDef.max_iterations||10;
+  var exitCond=nodeDef.exit_condition||null,iterVar=nodeDef.iteration_var||'i';
+  var ns=state.node_states[nodeId];
+  if(!children.length)return {error:'loop需要至少一个child节点'};
+  // ★ 收集循环体内所有节点（含嵌套子节点）
+  var loopNodeIds=[],loopNodeMap={};
+  for(var ci=0;ci<children.length;ci++){var cid=children[ci];if(def.dag.nodes[cid]){loopNodeIds.push(cid);loopNodeMap[cid]=true;}}
+  var _queue=children.slice();
+  while(_queue.length){var _qid=_queue.shift(),_qnd=def.dag.nodes[_qid];if(_qnd&&_qnd.children){for(var _qci=0;_qci<_qnd.children.length;_qci++){var _qcid=_qnd.children[_qci];if(!loopNodeMap[_qcid]&&def.dag.nodes[_qcid]){loopNodeMap[_qcid]=true;loopNodeIds.push(_qcid);_queue.push(_qcid);}}}}
+  // ★ 过滤仅循环体内的边
+  var loopEdges=[];
+  for(var ei=0;ei<(def.dag.edges||[]).length;ei++){var _e=def.dag.edges[ei];if(loopNodeMap[_e.from]&&loopNodeMap[_e.to])loopEdges.push(_e);}
+  var collectedOutputs=[],iterationLog=[];
+  var _savedLoop=state.context['$loop']||null;
+  for(var iter=0;iter<maxIter;iter++){
+    debugLogger.info('🔁 Loop迭代 '+iter+'/'+maxIter+' | node:'+nodeId);
+    // ★ 重置循环体内所有节点为pending
+    for(var li=0;li<loopNodeIds.length;li++){var _lid=loopNodeIds[li];if(state.node_states[_lid]){state.node_states[_lid].status='pending';state.node_states[_lid].output=null;state.node_states[_lid]._loopIter=iter;}}
+    // ★ 注入迭代变量
+    if(!state.context['$loop'])state.context['$loop']={};
+    state.context['$loop'][iterVar]=iter;
+    // ★ 按拓扑依次执行循环体
+    var loopTopo=_topoSort(loopEdges,loopNodeIds);
+    for(var ti=0;ti<loopTopo.length;ti++){
+      var tnid=loopTopo[ti],tns=state.node_states[tnid];
+      if(!tns||tns.status!=='pending')continue;
+      var _depsMet=true;
+      for(var _dei=0;_dei<loopEdges.length;_dei++){if(loopEdges[_dei].to===tnid){var _ds=state.node_states[loopEdges[_dei].from];if(!_ds||(_ds.status!=='completed'&&_ds.status!=='skipped'&&_ds.status!=='failed'&&_ds.status!=='failed_with_fallback')){_depsMet=false;break;}}}
+      if(!_depsMet)continue;
+      var _tnDef=def.dag.nodes[tnid],_ltype=_tnDef.type||'agent';
+      if(_ltype==='loop'){await _execLoopNode(_tnDef,state,def,runId,tnid);}
+      else{await _execNode(def,state,runId,tnid);}
+      // ★ 检查退出条件（支持复合表达式）
+      if(exitCond&&tns.status==='completed'&&tns.output){
+        var _exCheck=_evalEdge(exitCond,tns,true);
+        if(_exCheck.passed){
+          for(var _oli=0;_oli<loopNodeIds.length;_oli++){var _olid=loopNodeIds[_oli],_olns=state.node_states[_olid];if(_olns&&_olns.output!==undefined)collectedOutputs.push({node:_olid,iteration:iter,output:_olns.output});}
+          iterationLog.push({iteration:iter,exit:true,exitNode:tnid});
+          ns.output={iterations:iter+1,collected:collectedOutputs,log:iterationLog,exit_reason:'condition_met'};
+          ns.status='completed';ns.completed_at=Date.now();
+          if(_savedLoop===null)delete state.context['$loop'];else state.context['$loop']=_savedLoop;
+          return ns.output;
+        }
+      }
+    }
+    var _iterOutputs={};
+    for(var _oli2=0;_oli2<loopNodeIds.length;_oli2++){var _olid2=loopNodeIds[_oli2],_olns2=state.node_states[_olid2];if(_olns2&&_olns2.output!==undefined){_iterOutputs[_olid2]=_olns2.output;collectedOutputs.push({node:_olid2,iteration:iter,output:_olns2.output});}}
+    iterationLog.push({iteration:iter,outputs:_iterOutputs});
+  }
+  if(_savedLoop===null)delete state.context['$loop'];else state.context['$loop']=_savedLoop;
+  ns.output={iterations:maxIter,collected:collectedOutputs,log:iterationLog,exit_reason:'max_iterations'};
+  ns.status='completed';ns.completed_at=Date.now();return ns.output;
+}
+
+// ===== V6: Sub-pipeline 子流水线复用节点 =====
+// pipeline_id: 引用已存在的流水线ID, input_bindings: 传入上下文
+async function _execSubPipelineNode(nodeDef,state,def,runId,nodeId){
+  var pipeId=nodeDef.pipeline_id;
+  if(!pipeId)return {error:'sub_pipeline缺少pipeline_id'};
+  var store=await _loadPipes();
+  var subDef=_pipelines[pipeId]||store.definitions[pipeId];
+  if(!subDef)return {error:'未找到子流水线: '+pipeId};
+  var inputCtx=_resolveBindings(nodeDef.input_bindings,state,runId);
+  var mergedCtx=JSON.parse(JSON.stringify(state.context||{}));
+  for(var k in inputCtx)mergedCtx[k]=inputCtx[k];
+  var subRunId='sub_'+nodeId+'_'+Date.now();
+  var subState={id:subRunId,pipeline_id:pipeId,status:'running',node_states:{},report_history:[],checkpoints:[],context:mergedCtx,started_at:Date.now(),updated_at:Date.now(),_parentRunId:runId,_parentNodeId:nodeId};
+  for(var snid in subDef.dag.nodes){subState.node_states[snid]={status:'pending',output:null,metrics:{},attempts:0,started_at:null,completed_at:null};}
+  _pipelineRuns[subRunId]=subState;await _saveRun(subRunId,subState);
+  debugLogger.info('📦 Sub-pipeline启动: '+nodeId+' → '+pipeId+' ('+subDef.name+') | subRun: '+subRunId);
+  // ★ 同步执行子流水线
+  var subTopo=_topoSort(subDef.dag.edges,Object.keys(subDef.dag.nodes));
+  var _subMaxConc=subDef.concurrency||3,subInProgress=new Set(),subActive=0;
+  while(subState.status==='running'){
+    if(subState.status==='waiting_report'){debugLogger.info('📦 Sub-pipeline报告门自动approve');if(subState.node_states[subState._reportNodeId])subState.node_states[subState._reportNodeId].status='completed';subState.status='running';subState._reportNodeId=null;subState._reportData=null;}
+    while(subActive<_subMaxConc){var _sr=_findReady(subDef.dag,subState,subTopo).filter(function(n){return!subInProgress.has(n);});if(!_sr.length)break;var _snid=_sr[0];subInProgress.add(_snid);subActive++;_execNode(subDef,subState,subRunId,_snid).then(function(){_resolveRoutes(subDef,subState,_snid);subInProgress.delete(_snid);subActive--;}).catch(function(e){subInProgress.delete(_snid);subActive--;debugLogger.error('📦 Sub-pipeline节点失败: '+_snid+' | '+e.message);});}
+    if(subActive===0){var _src=_findReady(subDef.dag,subState,subTopo).filter(function(n){return!subInProgress.has(n);});if(!_src.length){var _ad=Object.keys(subState.node_states).every(function(n){var s=subState.node_states[n];return s.status==='completed'||s.status==='failed'||s.status==='failed_with_fallback'||s.status==='skipped'||s.status==='skipped_by_cond'||s.status==='routed_out'||s.status==='removed';});subState.status=_ad?'completed':'failed';break;}}
+    await _saveRun(subRunId,subState);await _sleep(500);
+  }
+  var subOutputs={};
+  for(var onid in subState.node_states){var ons=subState.node_states[onid];if(ons.output!==undefined&&ons.output!==null)subOutputs[onid]=ons.output;}
+  subState.updated_at=Date.now();await _saveRun(subRunId,subState);
+  debugLogger.info('📦 Sub-pipeline完成: '+nodeId+' | 状态:'+subState.status+' | 产出:'+Object.keys(subOutputs).length+'节点');
+  if(subState.status==='failed'){
+    var _hasPErr=false;for(var _pei=0;_pei<(def.dag.edges||[]).length;_pei++){if(def.dag.edges[_pei].from===nodeId&&def.dag.edges[_pei].on_error){_hasPErr=true;break;}}
+    if(_hasPErr)return {output:subOutputs,sub_status:'failed',_error:subState.error||'sub-pipeline failed'};
+    return {error:'子流水线失败: '+(subState.error||'unknown'),sub_outputs:subOutputs};
+  }
+  return {output:subOutputs,sub_status:subState.status,sub_run_id:subRunId};
+}
+
+// ===== V6: Transform 数据整形节点（JMESPath子集，沙箱，纯函数，<50ms） =====
+function _execTransformNode(nodeDef,state,def,runId,nodeId){
+  var ns=state.node_states[nodeId];
+  var inputCtx=_resolveBindings(nodeDef.input_bindings,state,runId);
+  var expr=nodeDef.transform_expr||'$';
+  var t0=Date.now();
+  try{
+    var result=_evalTransform(expr,inputCtx);
+    ns.output=result;ns.status='completed';ns.completed_at=Date.now();
+    ns.metrics={transform_ms:Date.now()-t0,input_keys:Object.keys(inputCtx||{})};
+    debugLogger.info('⚡ Transform完成: '+nodeId+' | '+ns.metrics.transform_ms+'ms | expr:'+expr.substring(0,80)+' | keys:'+(ns.metrics.input_keys.join(',')||'(none)'));
+    return result;
+  }catch(e){
+    ns.status='failed';ns.error=e.message;ns.completed_at=Date.now();
+    ns.metrics={transform_ms:Date.now()-t0,input_keys:Object.keys(inputCtx||{}),expr_preview:expr.substring(0,120)};
+    debugLogger.error('⚡ Transform失败: '+nodeId+' | '+e.message+' | expr:'+expr.substring(0,120)+' | ctxKeys:'+(ns.metrics.input_keys.join(',')||'(none)'));
+    return {error:e.message,expr:expr.substring(0,120),context_keys:ns.metrics.input_keys};
+  }
+}
+
+// ===== Transform 表达式解析器 & 执行器（JMESPath子集） =====
+// 语法: pipe = term ("|" term)*    term = selector ("||" literal)?
+//       selector = primary ("." field | "[" idx "]" | "[*]" | "[?cond]" | "[s:e]")*
+//       primary = "$" | literal | "{" multiselect "}" | "(" pipe ")"
+//       cond = or_expr ("||" or_expr)*    comp = value (>=|<=|>|<|==|!=) value
+function _evalTransform(expr,root){
+  var _tokens=null,_pos=0;
+
+  function _tokenize(s){
+    var toks=[],i=0;
+    while(i<s.length){
+      if(/\s/.test(s[i])){i++;continue;}
+      if(s[i]==='"'||s[i]==="'"){
+        var q=s[i],start=i;i++;
+        while(i<s.length&&s[i]!==q){if(s[i]==='\\')i++;i++;}
+        if(i>=s.length)throw new Error('未闭合字符串从位置'+start);i++;
+        toks.push({type:'STRING',value:JSON.parse(s.substring(start,i))});
+        continue;
+      }
+      if(/[0-9]/.test(s[i])||(s[i]==='-'&&i+1<s.length&&/[0-9]/.test(s[i+1]))){
+        var start2=i;if(s[i]==='-')i++;
+        while(i<s.length&&/[0-9.]/.test(s[i]))i++;
+        toks.push({type:'NUMBER',value:parseFloat(s.substring(start2,i))});
+        continue;
+      }
+      if(s.substr(i,2)==='||'){toks.push({type:'OR'});i+=2;continue;}
+      if(s.substr(i,2)==='&&'){toks.push({type:'AND'});i+=2;continue;}
+      if(s.substr(i,2)==='>='){toks.push({type:'GTE'});i+=2;continue;}
+      if(s.substr(i,2)==='<='){toks.push({type:'LTE'});i+=2;continue;}
+      if(s.substr(i,2)==='=='){toks.push({type:'EQ'});i+=2;continue;}
+      if(s.substr(i,2)==='!='){toks.push({type:'NEQ'});i+=2;continue;}
+      if(s[i]==='>'){toks.push({type:'GT'});i++;continue;}
+      if(s[i]==='<'){toks.push({type:'LT'});i++;continue;}
+      if(s[i]==='!'){toks.push({type:'NOT'});i++;continue;}
+      if(s[i]==='.'){toks.push({type:'DOT'});i++;continue;}
+      if(s[i]==='|'){toks.push({type:'PIPE'});i++;continue;}
+      if(s[i]==='*'){toks.push({type:'STAR'});i++;continue;}
+      if(s[i]==='$'){toks.push({type:'ROOT'});i++;continue;}
+      if(s[i]==='@'){toks.push({type:'AT'});i++;continue;}
+      if(s[i]==='&'){toks.push({type:'AMP'});i++;continue;}
+      if(s[i]==='['){toks.push({type:'LBRACKET'});i++;continue;}
+      if(s[i]===']'){toks.push({type:'RBRACKET'});i++;continue;}
+      if(s[i]==='{'){toks.push({type:'LBRACE'});i++;continue;}
+      if(s[i]==='}'){toks.push({type:'RBRACE'});i++;continue;}
+      if(s[i]==='('){toks.push({type:'LPAREN'});i++;continue;}
+      if(s[i]===')'){toks.push({type:'RPAREN'});i++;continue;}
+      if(s[i]==='?'){toks.push({type:'QMARK'});i++;continue;}
+      if(s[i]===':'){toks.push({type:'COLON'});i++;continue;}
+      if(s[i]===','){toks.push({type:'COMMA'});i++;continue;}
+      if(/[a-zA-Z_]/.test(s[i])){
+        var start3=i;
+        while(i<s.length&&/[a-zA-Z0-9_]/.test(s[i]))i++;
+        var word=s.substring(start3,i);
+        if(word==='true')toks.push({type:'BOOL',value:true});
+        else if(word==='false')toks.push({type:'BOOL',value:false});
+        else if(word==='null')toks.push({type:'NULL',value:null});
+        else if(word==='sort_by')toks.push({type:'SORT_BY'});
+        else toks.push({type:'IDENT',value:word});
+        continue;
+      }
+      throw new Error('未识别的字符: '+s[i]+' 位置'+i);
+    }
+    return toks;
+  }
+
+  function _peek(){return _pos<_tokens.length?_tokens[_pos]:null;}
+  function _next(){return _pos<_tokens.length?_tokens[_pos++]:null;}
+  function _expect(type){var t=_next();if(!t||t.type!==type)throw new Error('期望 '+type+' 实际 '+(t?t.type:'EOF'));return t;}
+
+  // ---- 入口 ----
+  _tokens=_tokenize(expr);_pos=0;
+  var result=_parsePipe();
+  if(_pos<_tokens.length)throw new Error('表达式未完全消费, 多余token: '+JSON.stringify(_tokens[_pos]));
+  return _eval(result,root);
+
+  // ---- 解析函数 ----
+  function _parsePipe(){var left=_parseTerm();while(_peek()&&_peek().type==='PIPE'){_next();var right=_parseTerm();left={type:'PIPE',left:left,right:right};}return left;}
+  function _parseTerm(){var left=_parseSelector();while(_peek()&&_peek().type==='OR'){_next();var t=_peek();if(t&&(t.type==='STRING'||t.type==='NUMBER'||t.type==='BOOL'||t.type==='NULL')){left={type:'DEFAULT',left:left,right:_next()};}else{throw new Error('|| 右侧必须是字面量');}}return left;}
+  function _parseSelector(){var left=_parsePrimary();while(true){var t=_peek();if(!t)break;if(t.type==='DOT'){_next();var id=_expect('IDENT');left={type:'FIELD',obj:left,key:id.value};}else if(t.type==='LBRACKET'){_next();var inner=_peek();if(inner&&inner.type==='STAR'){_next();_expect('RBRACKET');left={type:'PROJECTION',arr:left};}else if(inner&&inner.type==='QMARK'){_next();var cond=_parseCondOr();_expect('RBRACKET');left={type:'FILTER',arr:left,cond:cond};}else if(inner&&(inner.type==='NUMBER'||inner.type==='ROOT'||inner.type==='IDENT')){var maybeIdx=_parseSelector();if(_peek()&&_peek().type==='COLON'){_next();var end=null;if(_peek()&&(_peek().type==='NUMBER'||_peek().type==='ROOT'||_peek().type==='IDENT')){end=_parseSelector();}_expect('RBRACKET');left={type:'SLICE',arr:left,start:maybeIdx,end:end};}else{_expect('RBRACKET');left={type:'INDEX',arr:left,idx:maybeIdx};}}else if(inner&&inner.type==='COLON'){_next();var end2=null;if(_peek()&&(_peek().type==='NUMBER'||_peek().type==='ROOT'||_peek().type==='IDENT')){end2=_parseSelector();}_expect('RBRACKET');left={type:'SLICE',arr:left,start:null,end:end2};}else{throw new Error('[] 内语法错误, 遇到: '+(inner?inner.type:'EOF'));}}else{break;}}return left;}
+  function _parsePrimary(){var t=_peek();if(!t)throw new Error('意外EOF');if(t.type==='ROOT'){_next();return {type:'ROOT'};}if(t.type==='AT'){_next();return {type:'AT'};}if(t.type==='IDENT'){_next();return {type:'FIELD',obj:{type:'ROOT'},key:t.value};}if(t.type==='STRING'||t.type==='NUMBER'||t.type==='BOOL'||t.type==='NULL'){return _next();}if(t.type==='LPAREN'){_next();var inner=_parsePipe();_expect('RPAREN');return inner;}if(t.type==='LBRACE'){return _parseMultiselect();}throw new Error('意外的 token: '+t.type);}
+  function _parseMultiselect(){_expect('LBRACE');var pairs=[];if(_peek()&&_peek().type!=='RBRACE'){do{var key=_expect('IDENT').value;_expect('COLON');var val=_parsePipe();pairs.push({key:key,val:val});}while(_peek()&&_peek().type==='COMMA'&&(_next(),true));}_expect('RBRACE');return {type:'MULTISELECT',pairs:pairs};}
+  function _parseCondOr(){var left=_parseCondAnd();while(_peek()&&_peek().type==='OR'){_next();var right=_parseCondAnd();left={type:'COND_OR',left:left,right:right};}return left;}
+  function _parseCondAnd(){var left=_parseCondNot();while(_peek()&&_peek().type==='AND'){_next();var right=_parseCondNot();left={type:'COND_AND',left:left,right:right};}return left;}
+  function _parseCondNot(){if(_peek()&&_peek().type==='NOT'){_next();return {type:'COND_NOT',inner:_parseCondNot()};}return _parseCondComp();}
+  function _parseCondComp(){if(_peek()&&_peek().type==='SORT_BY'){_next();_expect('LPAREN');var target=_parsePipe();_expect('COMMA');_expect('AMP');var field=_expect('IDENT').value;var desc=false;if(_peek()&&_peek().type==='IDENT'&&_peek().value==='desc'){_next();desc=true;}_expect('RPAREN');return {type:'SORT_BY',target:target,field:field,desc:desc};}var left=_parseCondValue();var op=_peek();if(op&&(op.type==='GTE'||op.type==='LTE'||op.type==='GT'||op.type==='LT'||op.type==='EQ'||op.type==='NEQ')){_next();var right=_parseCondValue();return {type:'COMPARE',left:left,op:op.type,right:right};}return left;}
+  function _parseCondValue(){if(_peek()&&_peek().type==='STRING')return _next();if(_peek()&&_peek().type==='NUMBER')return _next();if(_peek()&&_peek().type==='BOOL')return _next();if(_peek()&&_peek().type==='NULL')return _next();return _parseSelector();}
+
+  // ---- 执行函数 ----
+  function _eval(ast,ctx){
+    switch(ast.type){
+      case 'ROOT':return ctx;
+      case 'AT':return ctx;
+      case 'STRING':case 'NUMBER':case 'BOOL':case 'NULL':return ast.value;
+      case 'FIELD':var obj=_eval(ast.obj,ctx);return _fieldGet(obj,ast.key);
+      case 'INDEX':var arr=_eval(ast.arr,ctx);var idx=_evalIndex(ast.idx,ctx,arr);if(!Array.isArray(arr))throw new Error('索引访问的目标不是数组');return arr[idx];
+      case 'PROJECTION':var src=_eval(ast.arr,ctx);if(!Array.isArray(src))throw new Error('投影的目标不是数组');return src.map(function(item){return item;});
+      case 'FILTER':var src2=_eval(ast.arr,ctx);if(!Array.isArray(src2))throw new Error('过滤的目标不是数组');return src2.filter(function(item){return _truthy(_eval(ast.cond,item));});
+      case 'SLICE':var src3=_eval(ast.arr,ctx);if(typeof src3==='string'){var ss=ast.start?_evalIndex(ast.start,ctx,null):0;var se=ast.end?_evalIndex(ast.end,ctx,null):src3.length;if(ss<0)ss=src3.length+ss;if(se<0)se=src3.length+se;return src3.slice(ss,se);}if(!Array.isArray(src3))throw new Error('切片的目标不是数组或字符串, 实际: '+typeof src3);var s=ast.start?_evalIndex(ast.start,ctx,src3):0;var e=ast.end?_evalIndex(ast.end,ctx,src3):src3.length;if(s<0)s=src3.length+s;if(e<0)e=src3.length+e;return src3.slice(s,e);
+      case 'MULTISELECT':var out={};for(var i=0;i<ast.pairs.length;i++){out[ast.pairs[i].key]=_eval(ast.pairs[i].val,ctx);}return out;
+      case 'PIPE':var left=_eval(ast.left,ctx);return _eval(ast.right,left);
+      case 'DEFAULT':try{var v=_eval(ast.left,ctx);if(v===null||v===undefined||v==='')return _eval(ast.right,ctx);return v;}catch(e){return _eval(ast.right,ctx);}
+      case 'COMPARE':var l=_eval(ast.left,ctx),r=_eval(ast.right,ctx);switch(ast.op){case'GTE':return l>=r;case'LTE':return l<=r;case'GT':return l>r;case'LT':return l<r;case'EQ':return _looseEq(l,r);case'NEQ':return!_looseEq(l,r);}return false;
+      case 'COND_AND':return _truthy(_eval(ast.left,ctx))&&_truthy(_eval(ast.right,ctx));
+      case 'COND_OR':return _truthy(_eval(ast.left,ctx))||_truthy(_eval(ast.right,ctx));
+      case 'COND_NOT':return!_truthy(_eval(ast.inner,ctx));
+      case 'SORT_BY':var arr2=_eval(ast.target,ctx);if(!Array.isArray(arr2))throw new Error('sort_by的目标不是数组');var f=ast.field,d=ast.desc;return arr2.slice().sort(function(a,b){var va=_fieldGet(a,f),vb=_fieldGet(b,f);if(va===vb)return 0;if(va===null||va===undefined)return 1;if(vb===null||vb===undefined)return -1;var cmp=va<vb?-1:(va>vb?1:0);return d?-cmp:cmp;});
+      default:throw new Error('未知AST类型: '+ast.type);
+    }
+  }
+
+  function _evalIndex(ast,ctx,arr){var v=_eval(ast,ctx);if(typeof v==='number'){var i=v;if(arr!==null&&arr!==undefined&&i<0)i=arr.length+i;return i;}throw new Error('索引必须是数字, 实际: '+typeof v);}
+  function _fieldGet(obj,key){if(obj===null||obj===undefined)return undefined;if(Array.isArray(obj))return obj.map(function(item){return _fieldGet(item,key);});if(typeof obj==='object')return obj[key];return undefined;}
+  function _truthy(v){return v!==false&&v!==null&&v!==undefined&&v!==0&&v!=='';}
+  function _looseEq(a,b){if(a===b)return true;if(a==null&&b==null)return true;if(typeof a==='string'&&typeof b==='string')return a.toLowerCase()===b.toLowerCase();if(typeof a==='boolean')a=a?'true':'false';if(typeof b==='boolean')b=b?'true':'false';return String(a)===String(b);}
+}
+
 // ===== 执行单个节点（分发） =====
 async function _execNode(def,state,runId,nodeId){
   var nodeDef=def.dag.nodes[nodeId],ns=state.node_states[nodeId];
@@ -9245,6 +9542,9 @@ async function _execNode(def,state,runId,nodeId){
   try{
     var output,ltype=nodeDef.type||'agent';
     if(ltype==='agent')output=await _execAgentNode(nodeDef,state,def,runId,nodeId);
+    else if(ltype==='loop')output=await _execLoopNode(nodeDef,state,def,runId,nodeId);
+    else if(ltype==='sub_pipeline')output=await _execSubPipelineNode(nodeDef,state,def,runId,nodeId);
+    else if(ltype==='transform')output=_execTransformNode(nodeDef,state,def,runId,nodeId);
     else if(ltype==='parallel_group')output=await _execParallelGroup(nodeDef,state,def,runId,nodeId);
     else if(ltype==='report_gate'){output=await _execReportGate(nodeDef,state,def,runId,nodeId);ns.status='reporting';return output;}
     else if(ltype==='evaluation')output=await _execEvalNode(nodeDef,state,def,runId,nodeId);
@@ -9291,7 +9591,32 @@ async function _execNode(def,state,runId,nodeId){
     ns.output=output;ns.completed_at=Date.now();ns.status='completed';
     await createFile('/pipelines/'+runId+'/outputs/'+nodeId+'.json',JSON.stringify(output,null,2));
     return output;
-  }catch(e){ns.status='failed';ns.error=e.message;ns.completed_at=Date.now();await _wtTrace(runId,nodeId,'error.json',{error:e.message,stack:e.stack});return {error:e.message};}
+  }catch(e){
+    ns.status='failed';ns.error=e.message;ns.completed_at=Date.now();
+    await _wtTrace(runId,nodeId,'error.json',{error:e.message,stack:e.stack});
+    // ★ V6: 检查 on_error 降级边，路由到错误分支
+    var _edges=def.dag.edges||[],_hasOnError=false;
+    for(var _ei=0;_ei<_edges.length;_ei++){
+      if(_edges[_ei].from===nodeId&&_edges[_ei].on_error){
+        _hasOnError=true;
+        var _etNs=state.node_states[_edges[_ei].to];
+        if(_etNs&&_etNs.status==='pending'){debugLogger.info('🛡️ 节点失败→on_error路由: '+nodeId+'→'+_edges[_ei].to+' | '+e.message);}
+        // 级联路由：正常下游全部 routed_out
+        for(var _ej2=0;_ej2<_edges.length;_ej2++){
+          if(_edges[_ej2].from===nodeId&&!_edges[_ej2].on_error){
+            var _normNs=state.node_states[_edges[_ej2].to];
+            if(_normNs&&_normNs.status==='pending'){
+              _normNs.status='routed_out';_normNs.completed_at=Date.now();
+              _normNs._routedBy='error_in:'+nodeId;
+              _propagateRouted(def,state,_edges[_ej2].to);
+            }
+          }
+        }
+      }
+    }
+    if(_hasOnError){ns.status='failed_with_fallback';debugLogger.info('🛡️ 错误降级已激活: '+nodeId);}
+    return {error:e.message,_onErrorFallback:_hasOnError};
+  }
 }
 
 // ===== 异步执行引擎 =====
@@ -9346,7 +9671,7 @@ async function _runPipelineAsync(runId,def,state){
     }
     debugLogger.info('🏁 流水线循环退出: '+runId+' | 最终状态: '+state.status);
     if(state.status!=='waiting_report'&&state.status!=='failed'){
-var allDone=Object.keys(state.node_states).every(function(n){var s=state.node_states[n];return s.status==='completed'||s.status==='failed'||s.status==='skipped'||s.status==='skipped_by_cond'||s.status==='routed_out'||s.status==='removed';});
+var allDone=Object.keys(state.node_states).every(function(n){var s=state.node_states[n];return s.status==='completed'||s.status==='failed'||s.status==='failed_with_fallback'||s.status==='skipped'||s.status==='skipped_by_cond'||s.status==='routed_out'||s.status==='removed';});
       state.status=allDone?'completed':'failed';
     }
     state.updated_at=Date.now();await _saveRun(runId,state);
@@ -9380,6 +9705,20 @@ function _validateDAG(dag){
     }
     if(nt==='report_gate'){
       if(nd.children)warns.push(nid+' [report_gate]: children字段仅parallel_group使用,已忽略');
+    }
+    if(nt==='transform'){
+      if(!nd.transform_expr)warns.push(nid+' [transform]: 未指定transform_expr(默认"$"原样输出)');
+      if(nd.agent_config)warns.push(nid+' [transform]: agent_config无效,transform是纯函数节点');
+      if(nd.children)warns.push(nid+' [transform]: children字段无效');
+    }
+    if(nt==='loop'){
+      if(!nd.children||!nd.children.length)errs.push(nid+' [loop]: 必须有children字段(循环体节点ID列表)');
+      if(!nd.max_iterations)warns.push(nid+' [loop]: 未设max_iterations(默认10)');
+      if(nd.agent_config)warns.push(nid+' [loop]: agent_config仅agent节点使用,已忽略');
+    }
+    if(nt==='sub_pipeline'){
+      if(!nd.pipeline_id)errs.push(nid+' [sub_pipeline]: 必须有pipeline_id字段');
+      if(nd.children)warns.push(nid+' [sub_pipeline]: children字段仅parallel_group/loop使用,已忽略');
     }
     if(nt==='assembly'){
       if(!nd.sources||!nd.sources.length)errs.push(nid+' [assembly]: 必须有sources字段(来源节点ID列表)');
@@ -9598,6 +9937,53 @@ async function toolPipeline(args){
     await createFile('/pipelines/'+args.run_id+'/delivery/final.json',JSON.stringify(delivery,null,2));
     return '📦 交付物已生成: /pipelines/'+args.run_id+'/delivery/final.json\n包含 '+Object.keys(delivery).length+' 个模块产出';
   }
+
+  if(action==='delete'){
+    if(!args.pipeline_id)return '❌ 请指定 pipeline_id';
+    if(!_pipelines[args.pipeline_id]&&!store.definitions[args.pipeline_id])return '❌ 流水线不存在: '+args.pipeline_id;
+    var _delName=((_pipelines[args.pipeline_id]||store.definitions[args.pipeline_id]).name||'');
+    delete _pipelines[args.pipeline_id];delete store.definitions[args.pipeline_id];
+    await _savePipes(store);
+    return '🗑️ 已删除流水线: ['+args.pipeline_id+'] ' + _delName;
+  }
+
+  if(action==='update'){
+    if(!args.pipeline_id)return '❌ 请指定 pipeline_id';
+    var _tgt=_pipelines[args.pipeline_id]||store.definitions[args.pipeline_id];
+    if(!_tgt)return '❌ 流水线不存在: '+args.pipeline_id;
+    if(args.name!==undefined)_tgt.name=args.name;
+    if(args.description!==undefined)_tgt.description=args.description;
+    if(args.dag){
+      var _vd2=_validateDAG(args.dag);
+      if(!_vd2.valid)return '❌ DAG验证失败:\n'+_vd2.errors.join('\n');
+      var _oldNodes=_tgt.dag.nodes||{};
+      var _newNodes=args.dag.nodes||{};
+      for(var _kn in _newNodes){_oldNodes[_kn]=_newNodes[_kn];}
+      var _oldEdges=_tgt.dag.edges||[];
+      var _newEdges=args.dag.edges||[];
+      var _edgeMap={};
+      for(var _oi=0;_oi<_oldEdges.length;_oi++){_edgeMap[_oldEdges[_oi].from+'→'+_oldEdges[_oi].to]=_oldEdges[_oi];}
+      for(var _ni=0;_ni<_newEdges.length;_ni++){_edgeMap[_newEdges[_ni].from+'→'+_newEdges[_ni].to]=_newEdges[_ni];}
+      _tgt.dag.edges=Object.values(_edgeMap);
+      _tgt.dag.nodes=_oldNodes;
+    }
+    if(args.acceptance_metrics!==undefined)_tgt.acceptance_metrics=args.acceptance_metrics;
+    _pipelines[args.pipeline_id]=_tgt;store.definitions[args.pipeline_id]=_tgt;
+    await _savePipes(store);
+    return '✏️ 已更新流水线: ['+args.pipeline_id+'] '+_tgt.name;
+  }
+
+  if(action==='overwrite'){
+    if(!args.pipeline_id||!args.dag)return '❌ 请指定 pipeline_id 和 dag';
+    var _vd3=_validateDAG(args.dag);
+    if(!_vd3.valid)return '❌ DAG验证失败:\n'+_vd3.errors.join('\n');
+    var _wasExisting=!!(_pipelines[args.pipeline_id]||store.definitions[args.pipeline_id]);
+    _pipelines[args.pipeline_id]={id:args.pipeline_id,name:args.name||'',description:args.description||'',dag:args.dag,acceptance_metrics:args.acceptance_metrics||[],created_at:new Date().toISOString()};
+    store.definitions[args.pipeline_id]=_pipelines[args.pipeline_id];
+    await _savePipes(store);
+    return (_wasExisting?'♻️ 已覆盖: ':'✅ 已创建: ')+'['+args.pipeline_id+'] '+_pipelines[args.pipeline_id].name;
+  }
+
   return '未知action: '+action;
 }
 
