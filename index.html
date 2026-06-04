@@ -3985,6 +3985,7 @@ var budgetManager={
       this.usedToday=0;
       this.evoUsedToday=0;
       dailyTokenUsed=0;
+      _dailyTokenDate=new Date().toDateString();
       this.resetTime=this.getNextResetTime();
       debugLogger.info('🔄 预算已重置 | 新限额:'+this.dailyLimit);
     }
@@ -4026,7 +4027,8 @@ async function loadDailyUsage(){
         budgetUsed=usage.count||0;
         evoUsed=usage.evoCount||0;
         dailyTokenUsed=usage.tokenCount||0;
-      }else{budgetUsed=0;evoUsed=0;dailyTokenUsed=0;}
+        _dailyTokenDate=today;
+      }else{budgetUsed=0;evoUsed=0;dailyTokenUsed=0;_dailyTokenDate=today;}
     }
   }catch(e){budgetUsed=0;evoUsed=0;dailyTokenUsed=0;}
   budgetManager.usedToday=budgetUsed;
@@ -4091,7 +4093,6 @@ function recordDailyTokenUsage(messages, responseContent, apiUsage){
     }
     dailyTokenUsed = 0;
     _dailyTokenDate = todayStr;
-    budgetManager.resetTime = budgetManager.getNextResetTime();
   }
   // ★ 优先使用API返回的精确usage信息（OpenAI兼容格式）
   var tokensToAdd = 0;
