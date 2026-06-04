@@ -4648,11 +4648,11 @@ function renderMessage(role,content,artifacts,messageId){
     fbDiv.style.cssText='display:flex;gap:4px;margin-top:4px;padding:0 4px';
     var btnLike=document.createElement('button');
     btnLike.style.cssText='font-size:14px;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px';
-    btnLike.textContent='↑';btnLike.title='满意';
+    btnLike.textContent='Good';btnLike.title='满意';
     btnLike.addEventListener('click',function(){handleFeedback(messageId,'like');});
     var btnDislike=document.createElement('button');
     btnDislike.style.cssText='font-size:14px;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px';
-    btnDislike.textContent='↓';btnDislike.title='不满意';
+    btnDislike.textContent='Bad';btnDislike.title='不满意';
     btnDislike.addEventListener('click',function(){handleFeedback(messageId,'dislike');});
     fbDiv.appendChild(btnLike);
     fbDiv.appendChild(btnDislike);
@@ -4662,7 +4662,7 @@ function renderMessage(role,content,artifacts,messageId){
 }
 
 async function handleFeedback(messageId,type){
-  showToast(type==='like'?'感谢您的肯定 ↑':'感谢您的反馈，我会继续改进 ↓','info',2000);
+  showToast(type==='like'?'感谢您的肯定 Good':'感谢您的反馈，我会继续改进 Bad','info',2000);
   debugLogger.info('用户反馈: '+type+' for '+messageId);
   shortTermMemory.push({type:'system',content:'用户反馈: '+type+' (messageId: '+messageId+')',taskId:currentTaskId});
   try{
@@ -12998,11 +12998,11 @@ function addAgentMessageContainer(messageId){
   fbDiv.style.cssText='display:flex;gap:4px;margin-top:4px;padding:0 4px';
   var btnLike=document.createElement('button');
   btnLike.style.cssText='font-size:14px;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;opacity:0.7';
-  btnLike.textContent='↑';btnLike.title='满意';
+  btnLike.textContent='Good';btnLike.title='满意';
   btnLike.addEventListener('click',function(){handleFeedback(messageId,'like');});
   var btnDislike=document.createElement('button');
   btnDislike.style.cssText='font-size:14px;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;opacity:0.7';
-  btnDislike.textContent='↓';btnDislike.title='不满意';
+  btnDislike.textContent='Bad';btnDislike.title='不满意';
   btnDislike.addEventListener('click',function(){handleFeedback(messageId,'dislike');});
   fbDiv.appendChild(btnLike);
   fbDiv.appendChild(btnDislike);
