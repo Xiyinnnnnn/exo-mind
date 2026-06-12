@@ -12829,10 +12829,12 @@ async function _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, 
     if (_critiqueBlock) _critiqueBlock.classList.add('collapsed');
     if (_critique && _critique.toggle) _critique.toggle.textContent = '[>] 查看逐行审查';
 
-    var _firstLine = _critiqueContent.trim().split('\n')[0].trim();
+    var _lines = _critiqueContent.trim().split('\n');
+    var _firstLine = _lines[0].trim();
     if (!_firstLine || _firstLine === '可用') {
-      _inlineCritiqueCache[_cacheKey] = { ts: Date.now(), result: null };
-      return null;
+      var _note = _lines.slice(1).join('\n').trim();
+      _inlineCritiqueCache[_cacheKey] = { ts: Date.now(), result: _note || null };
+      return _note || null;
     }
     // 格式校验：必须是 "存疑 - ..." 或 "不可用 - ..."
     if (_firstLine.indexOf('存疑 - ') !== 0 && _firstLine.indexOf('不可用 - ') !== 0) {
@@ -13106,7 +13108,7 @@ async function processUserMessage(userText,taskId){
       if((settings.honesty_intensity||0) >= 2){
         var _ilcNote=await _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, artifacts, streamReasoning, streamContent);
         if(_ilcNote){
-          messages.push({role:'user',content:'[逐行审查] '+_ilcNote});
+          messages.push({role:'user',content:'[审查报告] '+_ilcNote});
         }
       }
       // 【心流强制放权】flow_mode启动后根Agent立即停止
