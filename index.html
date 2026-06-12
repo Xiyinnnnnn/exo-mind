@@ -1287,7 +1287,7 @@ var TOOL_REGISTRY={
   'word_generator':{name:'word_generator',description:'生成Word(.docx)。content用Markdown。',executor:'main_thread',
     parameters:{type:'object',properties:{title:{type:'string'},content:{type:'string',description:'Markdown'},filename:{type:'string',description:'不含扩展名'}},required:['title','content']}},
   'fuzzy_search':{name:'fuzzy_search',description:'文件内模糊搜索(Fuse.js)。搜VFS内文件内容，非网络。可限定file或path。',executor:'task_worker',
-    parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词(仅匹配内容不匹配文件名)'},file:{type:'string',description:'限定单文件，如/uploads/a.txt(传此忽略path)'},path:{type:'string',default:'/',description:'限定目录前缀，默认/'},limit:{type:'number',default:10,description:'返回条数默认10'}},required:['query']}},
+    parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词(仅匹配内容不匹配文件名)'},file:{type:'string',description:'限定单文件，如/uploads/a.txt(传此忽略path)'},path:{type:'string',default:'/',description:'限定目录前缀，默认/'},limit:{type:'number',default:10,description:'返回条数默认10'}},required:['query','file']}},
   'mcts_plan':{name:'mcts_plan',description:'MCTS多步规划。mode:fast(150sims)/standard(600sims,thinking)。',executor:'main_thread',
     parameters:{type:'object',properties:{problem:{type:'string'},goal:{type:'string'},constraints:{type:'string'},mode:{type:'string',enum:['fast','standard'],default:'fast'}},required:['problem','goal']}},
   'ocr':{name:'ocr',description:'图片OCR(Tesseract)。传filename或image_base64。结果存.ocr.txt。',executor:'task_worker',
