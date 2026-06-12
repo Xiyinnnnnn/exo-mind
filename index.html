@@ -6951,30 +6951,38 @@ function _buildLLMRequest(messages,tools,stream,source){
     for(var _mi=0;_mi<cleanedMessages.length;_mi++){
       _estMsgTotal+=(cleanedMessages[_mi]._tokens||Math.ceil(((cleanedMessages[_mi].content||'').length+(cleanedMessages[_mi].reasoning_content||'').length)*0.4));
     }
-    // 第一层：精炼最大工具结果
+    // 第一层：精炼所有超长工具结果（>1000字符），替换为引导性语句
     if(_estMsgTotal>_safeMsgTokens){
-      var _bigIdx=-1,_bigChars=0;
       for(var _mi2=0;_mi2<cleanedMessages.length;_mi2++){
         var _cl2=(cleanedMessages[_mi2].content||'').length;
-        if(_cl2>_bigChars&&(cleanedMessages[_mi2].tool_call_id||cleanedMessages[_mi2].name)){_bigChars=_cl2;_bigIdx=_mi2;}
+        if(_cl2>1000&&(cleanedMessages[_mi2].tool_call_id||cleanedMessages[_mi2].name)){
+          var _tname=cleanedMessages[_mi2].name||'';
+          var _paths=[];var _bpath='';
+          var _pm=(cleanedMessages[_mi2].content||'').match(/\/[\w\/\.\-\u4e00-\u9fff]+/g);
+          if(_pm){for(var _pi=0;_pi<Math.min(_pm.length,3);_pi++){if(_paths.indexOf(_pm[_pi])<0)_paths.push(_pm[_pi]);}_bpath=_pm[0];}
+          var _guide='[已精炼] ';
+          if(_tname==='filesystem'){_guide+='文件在VFS中 | 路径:'+(_paths.join(', ')||_bpath||'未知')+' | 用 filesystem action="read" path="'+(_bpath||'/')+'" 重新读取完整内容';}
+          else if(_tname==='search'){_guide+='网络搜索结果('+(_cl2/1000).toFixed(0)+'K字符) | 可用 search 重新搜索';}
+          else if(_tname==='fuzzy_search'){_guide+='模糊搜索结果('+(_cl2/1000).toFixed(0)+'K字符) | 文件:'+(_bpath||'未知')+' | 可用 fuzzy_search 重新搜索';}
+          else if(_tname==='semantic_memory'){_guide+='历史对话片段('+(_cl2/1000).toFixed(0)+'K字符) | 可用 semantic_memory 重新搜索';}
+          else if(_tname==='longterm_memory'){_guide+='笔记内容('+(_cl2/1000).toFixed(0)+'K字符) | 可用 longterm_memory action="query" 或 action="get" 重新获取';}
+          else if(_tname==='knowledge_base'){_guide+='知识库条目('+(_cl2/1000).toFixed(0)+'K字符) | 可用 knowledge_base action="query" 或 action="get" 重新获取';}
+          else if(_tname==='skill_manager'){_guide+='技能清单 | 可用 skill_manager action="list" 重新查看';}
+          else if(_tname==='precise_time'){_guide+=_tname+'结果 | 可重新调用';}
+          else{_guide+=_tname+'结果('+(_cl2/1000).toFixed(0)+'K字符)'+(_paths.length>0?' | 路径:'+_paths.join(', '):'')+' | 可重新调用获取完整内容';}
+          cleanedMessages[_mi2].content=_guide;
+          cleanedMessages[_mi2]._tokens=Math.ceil(_guide.length*0.4);
+          debugLogger.warn(' 兜底精炼: '+_tname+'('+(_cl2/1000).toFixed(0)+'K)→引导语句');
+        }
       }
-      if(_bigIdx>=0&&_bigChars>1000){
-        var _tname=cleanedMessages[_bigIdx].name||'';
-        var _paths=[];
-        var _pm=cleanedMessages[_bigIdx].content.match(/\/[\w\/\.\-\u4e00-\u9fff]+/g);
-        if(_pm)for(var _pi=0;_pi<Math.min(_pm.length,3);_pi++){if(_paths.indexOf(_pm[_pi])<0)_paths.push(_pm[_pi]);}
-        var _pathGuide=_paths.length>0?' | 路径: '+_paths.join(', '):'';
-        cleanedMessages[_bigIdx].content='[已精炼] '+_tname+'结果('+(_bigChars/1000).toFixed(0)+'K字符)'+_pathGuide+
-          ' | 可通过对应工具重新获取完整内容';
-        cleanedMessages[_bigIdx]._tokens=Math.ceil(cleanedMessages[_bigIdx].content.length*0.4);
-        _estMsgTotal=0;
-        for(var _mii=0;_mii<cleanedMessages.length;_mii++){_estMsgTotal+=(cleanedMessages[_mii]._tokens||Math.ceil(((cleanedMessages[_mii].content||'').length)*0.4));}
-        debugLogger.warn(' 兜底精炼: '+_tname+'('+(_bigChars/1000).toFixed(0)+'K)→路径引导');
-      }
+      _estMsgTotal=0;
+      for(var _mii=0;_mii<cleanedMessages.length;_mii++){_estMsgTotal+=(cleanedMessages[_mii]._tokens||Math.ceil(((cleanedMessages[_mii].content||'').length)*0.4));}
     }
-    // 第二层：仍超限 → 丢弃最旧非system消息
+    // 第二层：仍超限 → 丢弃最旧非system非user消息
     while(_estMsgTotal>_safeMsgTokens&&cleanedMessages.length>3){
       var _dropIdx=1;
+      while(_dropIdx<cleanedMessages.length&&cleanedMessages[_dropIdx].role==='user'){_dropIdx++;}
+      if(_dropIdx>=cleanedMessages.length)break;
       var _dropped=cleanedMessages.splice(_dropIdx,1)[0];
       _estMsgTotal-=(_dropped._tokens||Math.ceil(((_dropped.content||'').length+(_dropped.reasoning_content||'').length)*0.4));
       debugLogger.warn(' 极端丢弃: 丢弃1条旧消息('+_dropped.role+') | 剩余est:'+_estMsgTotal+'/'+_safeMsgTokens);
@@ -7040,8 +7048,6 @@ async function streamChatCompletion(messages,tools,onChunk,source){
     }
     attempt++;
 
-    var _msgs = await _compressOldMessages(messages,1048565);
-    if(_msgs){messages.length=0;Array.prototype.push.apply(messages,_msgs);}
     var req=_buildLLMRequest(messages,tools,true,source);
     var response;
     var lastFetchError=null;
@@ -12936,11 +12942,10 @@ async function processUserMessage(userText,taskId){
   debugLogger.info(' 处理消息 | '+messages.length+'条上下文 | '+userText.length+'字符输入');
   // 长对话自动压缩（由压缩阈值滑条控制，与上下文条数无关）
   // ★ 防二次压缩：标记已压缩状态，避免压缩后的摘要再次触发压缩循环
-  var _wasCompressed=false;
-  for(var _cmi=0;_cmi<messages.length;_cmi++){if(messages[_cmi]._compressed){_wasCompressed=true;break;}}
-  if(!_wasCompressed){
-    var compressed=await _compressOldMessages(messages,1048565);
-    if(compressed){for(var _ci=0;_ci<compressed.length;_ci++)compressed[_ci]._compressed=true;messages=compressed;}
+  var compressed=await _compressOldMessages(messages,1048565);
+  if(compressed){
+    showToast('上下文较大，已自动压缩历史对话','info',2000);
+    for(var _ci=0;_ci<compressed.length;_ci++)compressed[_ci]._compressed=true;messages=compressed;
   }
   var _preUserMessages = messages.slice();
   messages.push({role:'user',content:userText});
