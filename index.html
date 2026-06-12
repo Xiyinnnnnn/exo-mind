@@ -12759,10 +12759,10 @@ async function _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, 
       var _cThinkToggle = document.createElement('div');
       _cThinkToggle.className = 'thinking-toggle';
       _cThinkToggle.id = _blockId + '-thinking-toggle-r' + _cr;
-      _cThinkToggle.textContent = '[v] 审查思考 (第' + (_cr + 1) + '轮)';
+      _cThinkToggle.textContent = '[v] 审查思考';
       _cThinkToggle.setAttribute('data-target', _blockId + '-thinking-r' + _cr);
-      _cThinkToggle.setAttribute('data-collapse-label', '[v] 审查思考 (第' + (_cr + 1) + '轮)');
-      _cThinkToggle.setAttribute('data-expand-label', '[>] 审查思考 (第' + (_cr + 1) + '轮)');
+      _cThinkToggle.setAttribute('data-collapse-label', '[v] 审查思考');
+      _cThinkToggle.setAttribute('data-expand-label', '[>] 审查思考');
       if (_contentDiv) {
         _contentDiv.parentNode.insertBefore(_cThinkToggle, _critique.toggle);
         _contentDiv.parentNode.insertBefore(_cThinkBlock, _critique.toggle);
@@ -12778,7 +12778,7 @@ async function _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, 
         if (delta && delta.content) {
           _cStreamContent += delta.content;
           _critiqueContent += delta.content;
-          _critiqueBlock.textContent = ' 审查中 (第' + (_cr + 1) + '轮)...\\n\\n' + _critiqueContent;
+          _critiqueBlock.textContent = ' 审查中...\\n\\n' + _critiqueContent;
         }
         if (delta && delta.tool_calls) {
           for (var t = 0; t < delta.tool_calls.length; t++) {
@@ -12795,7 +12795,7 @@ async function _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, 
       }, 'user');
 
       _cThinkBlock.classList.add('collapsed');
-      _cThinkToggle.textContent = '[>] 审查思考 (第' + (_cr + 1) + '轮)';
+      _cThinkToggle.textContent = '[>] 审查思考';
 
       var _cPending = [];
       var _cKeys = Object.keys(_cStreamTools);
@@ -12829,21 +12829,10 @@ async function _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, 
     if (_critiqueBlock) _critiqueBlock.classList.add('collapsed');
     if (_critique && _critique.toggle) _critique.toggle.textContent = '[>] 查看逐行审查';
 
-    var _lines = _critiqueContent.trim().split('\n');
-    var _firstLine = _lines[0].trim();
-    if (!_firstLine || _firstLine === '可用') {
-      var _note = _lines.slice(1).join('\n').trim();
-      _inlineCritiqueCache[_cacheKey] = { ts: Date.now(), result: _note || null };
-      return _note || null;
-    }
-    // 格式校验：必须是 "存疑 - ..." 或 "不可用 - ..."
-    if (_firstLine.indexOf('存疑 - ') !== 0 && _firstLine.indexOf('不可用 - ') !== 0) {
-      _inlineCritiqueCache[_cacheKey] = { ts: Date.now(), result: null };
-      return null;
-    }
-
-    _inlineCritiqueCache[_cacheKey] = { ts: Date.now(), result: _firstLine };
-    return _firstLine;
+    var _content = _critiqueContent.trim();
+    if (!_content) { _inlineCritiqueCache[_cacheKey] = { ts: Date.now(), result: null }; return null; }
+    _inlineCritiqueCache[_cacheKey] = { ts: Date.now(), result: _content };
+    return _content;
 
   } catch (e) {
     debugLogger.warn('逐行审查异常: ' + e.message);
@@ -13262,10 +13251,10 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             var critThinkToggle=document.createElement('div');
             critThinkToggle.className='thinking-toggle';
             critThinkToggle.id='critique-thinking-toggle-'+agentMessageId+iterSuffix+'-r'+critRound;
-            critThinkToggle.textContent='[v] 审查思考'+iterLabelSuffix+' (第'+(critRound+1)+'轮)';
+            critThinkToggle.textContent='[v] 审查思考'+iterLabelSuffix;
             critThinkToggle.setAttribute('data-target','critique-thinking-'+agentMessageId+iterSuffix+'-r'+critRound);
-            critThinkToggle.setAttribute('data-collapse-label','[v] 审查思考'+iterLabelSuffix+' (第'+(critRound+1)+'轮)');
-            critThinkToggle.setAttribute('data-expand-label','[>] 审查思考'+iterLabelSuffix+' (第'+(critRound+1)+'轮)');
+            critThinkToggle.setAttribute('data-collapse-label','[v] 审查思考'+iterLabelSuffix);
+            critThinkToggle.setAttribute('data-expand-label','[>] 审查思考'+iterLabelSuffix);
             contentDiv.parentNode.insertBefore(critThinkToggle,critique.toggle);
             contentDiv.parentNode.insertBefore(critThinkBlock,critique.toggle);
             _critiqueLastEl=critThinkBlock;
@@ -13280,7 +13269,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
                 if(delta&&delta.content){
                   critStreamContent+=delta.content;
                   critiqueContent+=delta.content;
-                  critique.block.textContent=' 审查中'+iterLabelSuffix+' (第'+(critRound+1)+'轮)...\n\n'+critiqueContent;
+                  critique.block.textContent=' 审查中'+iterLabelSuffix+'...\\n\\n'+critiqueContent;
                 }
                 if(delta&&delta.tool_calls){
                   for(var t=0;t<delta.tool_calls.length;t++){
@@ -13298,7 +13287,8 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             );
             if(critFinishReason==='length')debugLogger.warn(' 审查'+iterLabelSuffix+'第'+(critRound+1)+'轮被截断');
             critThinkBlock.classList.add('collapsed');
-            critThinkToggle.textContent='[>] 审查思考'+iterLabelSuffix+' (第'+(critRound+1)+'轮)';
+            critThinkToggle.textContent='[>] 审查思考'+iterLabelSuffix;
+
 
             var critPending=[];
             var cKeys=Object.keys(critStreamTools);
@@ -13391,10 +13381,10 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             var revThinkToggle=document.createElement('div');
             revThinkToggle.className='thinking-toggle';
             revThinkToggle.id='revision-thinking-toggle-'+agentMessageId+iterSuffix+'-r'+revRound;
-            revThinkToggle.textContent='[v] 修正思考'+iterLabelSuffix+' (第'+(revRound+1)+'轮)';
+            revThinkToggle.textContent='[v] 修正思考'+iterLabelSuffix;
             revThinkToggle.setAttribute('data-target','revision-thinking-'+agentMessageId+iterSuffix+'-r'+revRound);
-            revThinkToggle.setAttribute('data-collapse-label','[v] 修正思考'+iterLabelSuffix+' (第'+(revRound+1)+'轮)');
-            revThinkToggle.setAttribute('data-expand-label','[>] 修正思考'+iterLabelSuffix+' (第'+(revRound+1)+'轮)');
+            revThinkToggle.setAttribute('data-collapse-label','[v] 修正思考'+iterLabelSuffix);
+            revThinkToggle.setAttribute('data-expand-label','[>] 修正思考'+iterLabelSuffix);
             contentDiv.parentNode.insertBefore(revThinkToggle,revision.toggle);
             contentDiv.parentNode.insertBefore(revThinkBlock,revision.toggle);
             _revisionLastEl=revThinkBlock;
@@ -13413,7 +13403,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
                   if(bodyR)bodyR.innerHTML=renderMarkdown(agentContent);
                   else contentDiv.innerHTML=renderMarkdown(agentContent);
                   _injectCodeCopyButtons(contentDiv);
-                  revision.block.textContent=' 修正中'+iterLabelSuffix+' (第'+(revRound+1)+'轮)...\n\n'+agentContent.substring(0,2000)+(agentContent.length>2000?'\n...(持续输出中)':'');
+                  revision.block.textContent=' 修正中'+iterLabelSuffix+'...\\n\\n'+agentContent.substring(0,2000)+(agentContent.length>2000?'\\n...(持续输出中)':'');
 
                 }
                 if(delta&&delta.tool_calls){
@@ -13432,7 +13422,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             );
             if(revFinishReason==='length')debugLogger.warn(' 修正'+iterLabelSuffix+'第'+(revRound+1)+'轮被截断');
             revThinkBlock.classList.add('collapsed');
-            revThinkToggle.textContent='[>] 修正思考'+iterLabelSuffix+' (第'+(revRound+1)+'轮)';
+            revThinkToggle.textContent='[>] 修正思考'+iterLabelSuffix;
 
             var revPending=[];
             var rKeys=Object.keys(revStreamTools);
@@ -13544,8 +13534,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
     var allToggles = agentMsgDiv.querySelectorAll('.thinking-toggle');
     for(var tti=0;tti<allToggles.length;tti++){
       if(allToggles[tti].getAttribute('data-expand-label')) continue; // 跳过自评估自定义toggle
-      var roundNum = allToggles[tti].id.replace(/^.*-r/,'');
-      allToggles[tti].textContent = '[>] 查看思考过程' + (roundNum > 0 ? ' (第'+(parseInt(roundNum)+1)+'轮)' : '');
+      allToggles[tti].textContent = '[>] 查看思考过程';
     }
     // 移除思考指示器（如果还存在）
     var indicator = agentMsgDiv.querySelector('.thinking-indicator');
@@ -13735,19 +13724,19 @@ async function processFlowTurn(userText, cs, taskId){
             _critTB.id='flow-align-crit-thinking-'+session.iteration+'-er'+_er+'-r'+_cr;
             var _critTT=document.createElement('div');_critTT.className='thinking-toggle';
             _critTT.id='flow-align-crit-thinking-toggle-'+session.iteration+'-er'+_er+'-r'+_cr;
-            _critTT.textContent='[v] 审查思考 (第'+(_cr+1)+'轮)';
+            _critTT.textContent='[v] 审查思考';
             _critTT.setAttribute('data-target','flow-align-crit-thinking-'+session.iteration+'-er'+_er+'-r'+_cr);
-            _critTT.setAttribute('data-collapse-label','[v] 审查思考 (第'+(_cr+1)+'轮)');
-            _critTT.setAttribute('data-expand-label','[>] 审查思考 (第'+(_cr+1)+'轮)');
+            _critTT.setAttribute('data-collapse-label','[v] 审查思考');
+            _critTT.setAttribute('data-expand-label','[>] 审查思考');
             _supContentDiv.parentNode.insertBefore(_critTT,_supContentDiv);
             _supContentDiv.parentNode.insertBefore(_critTB,_supContentDiv);_critLastEl=_critTB;
             await streamChatCompletion(critMsgs,getActiveTools(),function(chunk){
               var delta=chunk.choices?chunk.choices[0].delta:null;
               if(delta&&delta.reasoning_content){_critSR+=delta.reasoning_content;_critTB.textContent=_critSR;}
-              if(delta&&delta.content){_critSC+=delta.content;_critiqueContent+=delta.content;_critBlock.block.textContent=' 审查中'+_sIterSuffix+' (第'+(_cr+1)+'轮)...\n\n'+_critiqueContent;}
+              if(delta&&delta.content){_critSC+=delta.content;_critiqueContent+=delta.content;_critBlock.block.textContent=' 审查中'+_sIterSuffix+'...\\n\\n'+_critiqueContent;}
               if(delta&&delta.tool_calls){for(var t=0;t<delta.tool_calls.length;t++){var tc=delta.tool_calls[t];var idx=tc.index!==undefined?tc.index:0;if(!_critST[idx])_critST[idx]={id:tc.id||'',function:{name:'',arguments:''}};if(tc.id)_critST[idx].id=tc.id;if(tc.function){if(tc.function.name)_critST[idx].function.name+=tc.function.name;if(tc.function.arguments)_critST[idx].function.arguments+=tc.function.arguments;}}}
             },'flow_supervisor');
-            _critTB.classList.add('collapsed');_critTT.textContent='[>] 审查思考 (第'+(_cr+1)+'轮)';
+            _critTB.classList.add('collapsed');_critTT.textContent='[>] 审查思考';
             var _critP=[];var _ck=Object.keys(_critST);
             for(var _ci=0;_ci<_ck.length;_ci++){var _stc=_critST[_ck[_ci]];if(_stc&&_stc.function.name)_critP.push({id:_stc.id,type:'function',function:_stc.function});}
             if(_critP.length===0)break;
@@ -13775,19 +13764,20 @@ async function processFlowTurn(userText, cs, taskId){
               _fixTB.id='flow-align-fix-thinking-'+session.iteration+'-er'+_er+'-r'+_fr;
               var _fixTT=document.createElement('div');_fixTT.className='thinking-toggle';
               _fixTT.id='flow-align-fix-thinking-toggle-'+session.iteration+'-er'+_er+'-r'+_fr;
-              _fixTT.textContent='[v] 修正思考 (第'+(_fr+1)+'轮)';
+              _fixTT.textContent='[v] 修正思考';
               _fixTT.setAttribute('data-target','flow-align-fix-thinking-'+session.iteration+'-er'+_er+'-r'+_fr);
-              _fixTT.setAttribute('data-collapse-label','[v] 修正思考 (第'+(_fr+1)+'轮)');
-              _fixTT.setAttribute('data-expand-label','[>] 修正思考 (第'+(_fr+1)+'轮)');
+              _fixTT.setAttribute('data-collapse-label','[v] 修正思考');
+              _fixTT.setAttribute('data-expand-label','[>] 修正思考');
               _supContentDiv.parentNode.insertBefore(_fixTT,_supContentDiv);
               _supContentDiv.parentNode.insertBefore(_fixTB,_supContentDiv);_fixLastEl=_fixTB;
               await streamChatCompletion(fixMsgs,getActiveTools(),function(chunk){
                 var delta=chunk.choices?chunk.choices[0].delta:null;
                 if(delta&&delta.reasoning_content){_fixSR+=delta.reasoning_content;_fixTB.textContent=_fixSR;}
-                if(delta&&delta.content){_fixSC+=delta.content;_agentContent+=delta.content;var body=_supContentDiv.querySelector('.msg-body');if(body)body.innerHTML=renderMarkdown(_agentContent);else _supContentDiv.innerHTML=renderMarkdown(_agentContent);_injectCodeCopyButtons(_supContentDiv);_fixBlock.block.textContent=' 修正中'+_sIterSuffix+' (第'+(_fr+1)+'轮)...\n\n'+_agentContent;}
+                if(delta&&delta.content){_fixSC+=delta.content;_agentContent+=delta.content;var body=_supContentDiv.querySelector('.msg-body');if(body)body.innerHTML=renderMarkdown(_agentContent);else _supContentDiv.innerHTML=renderMarkdown(_agentContent);_injectCodeCopyButtons(_supContentDiv);_fixBlock.block.textContent=' 修正中'+_sIterSuffix+'...\\n\\n'+_agentContent;}
                 if(delta&&delta.tool_calls){for(var t=0;t<delta.tool_calls.length;t++){var tc=delta.tool_calls[t];var idx=tc.index!==undefined?tc.index:0;if(!_fixST[idx])_fixST[idx]={id:tc.id||'',function:{name:'',arguments:''}};if(tc.id)_fixST[idx].id=tc.id;if(tc.function){if(tc.function.name)_fixST[idx].function.name+=tc.function.name;if(tc.function.arguments)_fixST[idx].function.arguments+=tc.function.arguments;}}}
               },'flow_supervisor');
-              _fixTB.classList.add('collapsed');_fixTT.textContent='[>] 修正思考 (第'+(_fr+1)+'轮)';
+              _fixTB.classList.add('collapsed');_fixTT.textContent='[>] 修正思考';
+
               var _fixP=[];var _fk=Object.keys(_fixST);
               for(var _fi=0;_fi<_fk.length;_fi++){var _stc=_fixST[_fk[_fi]];if(_stc&&_stc.function.name)_fixP.push({id:_stc.id,type:'function',function:_stc.function});}
               if(_fixP.length===0)break;
@@ -13957,19 +13947,20 @@ async function flowExecuteLoop(session, cs, taskId, messagesDiv){
           _critTB.id='flow-sup-crit-thinking-'+session.iteration+'-er'+_er+'-r'+_cr;
           var _critTT=document.createElement('div');_critTT.className='thinking-toggle';
           _critTT.id='flow-sup-crit-thinking-toggle-'+session.iteration+'-er'+_er+'-r'+_cr;
-          _critTT.textContent='[v] 审查思考 (第'+(_cr+1)+'轮)';
+          _critTT.textContent='[v] 审查思考';
           _critTT.setAttribute('data-target','flow-sup-crit-thinking-'+session.iteration+'-er'+_er+'-r'+_cr);
-          _critTT.setAttribute('data-collapse-label','[v] 审查思考 (第'+(_cr+1)+'轮)');
-          _critTT.setAttribute('data-expand-label','[>] 审查思考 (第'+(_cr+1)+'轮)');
+          _critTT.setAttribute('data-collapse-label','[v] 审查思考');
+          _critTT.setAttribute('data-expand-label','[>] 审查思考');
           _supContentDiv.parentNode.insertBefore(_critTT,_supContentDiv);
           _supContentDiv.parentNode.insertBefore(_critTB,_supContentDiv);_critLastEl=_critTB;
           await streamChatCompletion(critMsgs,getActiveTools(),function(chunk){
             var delta=chunk.choices?chunk.choices[0].delta:null;
             if(delta&&delta.reasoning_content){_critSR+=delta.reasoning_content;_critTB.textContent=_critSR;}
-            if(delta&&delta.content){_critSC+=delta.content;_critiqueContent+=delta.content;_critBlock.block.textContent=' 审查中'+_sIterSuffix+' (第'+(_cr+1)+'轮)...\n\n'+_critiqueContent;}
+            if(delta&&delta.content){_critSC+=delta.content;_critiqueContent+=delta.content;_critBlock.block.textContent=' 审查中'+_sIterSuffix+'...\\n\\n'+_critiqueContent;}
             if(delta&&delta.tool_calls){for(var t=0;t<delta.tool_calls.length;t++){var tc=delta.tool_calls[t];var idx=tc.index!==undefined?tc.index:0;if(!_critST[idx])_critST[idx]={id:tc.id||'',function:{name:'',arguments:''}};if(tc.id)_critST[idx].id=tc.id;if(tc.function){if(tc.function.name)_critST[idx].function.name+=tc.function.name;if(tc.function.arguments)_critST[idx].function.arguments+=tc.function.arguments;}}}
           },'flow_supervisor');
-          _critTB.classList.add('collapsed');_critTT.textContent='[>] 审查思考 (第'+(_cr+1)+'轮)';
+          _critTB.classList.add('collapsed');_critTT.textContent='[>] 审查思考';
+
           var _critP=[];var _ck=Object.keys(_critST);
           for(var _ci=0;_ci<_ck.length;_ci++){var _stc=_critST[_ck[_ci]];if(_stc&&_stc.function.name)_critP.push({id:_stc.id,type:'function',function:_stc.function});}
           if(_critP.length===0)break;
@@ -13999,19 +13990,20 @@ async function flowExecuteLoop(session, cs, taskId, messagesDiv){
             _fixTB.id='flow-sup-fix-thinking-'+session.iteration+'-er'+_er+'-r'+_fr;
             var _fixTT=document.createElement('div');_fixTT.className='thinking-toggle';
             _fixTT.id='flow-sup-fix-thinking-toggle-'+session.iteration+'-er'+_er+'-r'+_fr;
-            _fixTT.textContent='[v] 修正思考 (第'+(_fr+1)+'轮)';
+            _fixTT.textContent='[v] 修正思考';
             _fixTT.setAttribute('data-target','flow-sup-fix-thinking-'+session.iteration+'-er'+_er+'-r'+_fr);
-            _fixTT.setAttribute('data-collapse-label','[v] 修正思考 (第'+(_fr+1)+'轮)');
-            _fixTT.setAttribute('data-expand-label','[>] 修正思考 (第'+(_fr+1)+'轮)');
+            _fixTT.setAttribute('data-collapse-label','[v] 修正思考');
+            _fixTT.setAttribute('data-expand-label','[>] 修正思考');
             _supContentDiv.parentNode.insertBefore(_fixTT,_supContentDiv);
             _supContentDiv.parentNode.insertBefore(_fixTB,_supContentDiv);_fixLastEl=_fixTB;
             await streamChatCompletion(fixMsgs,getActiveTools(),function(chunk){
               var delta=chunk.choices?chunk.choices[0].delta:null;
               if(delta&&delta.reasoning_content){_fixSR+=delta.reasoning_content;_fixTB.textContent=_fixSR;}
-              if(delta&&delta.content){_fixSC+=delta.content;_agentContent+=delta.content;var body=_supContentDiv.querySelector('.msg-body');if(body)body.innerHTML=renderMarkdown(_agentContent);else _supContentDiv.innerHTML=renderMarkdown(_agentContent);_injectCodeCopyButtons(_supContentDiv);_fixBlock.block.textContent=' 修正中'+_sIterSuffix+' (第'+(_fr+1)+'轮)...\n\n'+_agentContent;}
+              if(delta&&delta.content){_fixSC+=delta.content;_agentContent+=delta.content;var body=_supContentDiv.querySelector('.msg-body');if(body)body.innerHTML=renderMarkdown(_agentContent);else _supContentDiv.innerHTML=renderMarkdown(_agentContent);_injectCodeCopyButtons(_supContentDiv);_fixBlock.block.textContent=' 修正中'+_sIterSuffix+'...\\n\\n'+_agentContent;}
               if(delta&&delta.tool_calls){for(var t=0;t<delta.tool_calls.length;t++){var tc=delta.tool_calls[t];var idx=tc.index!==undefined?tc.index:0;if(!_fixST[idx])_fixST[idx]={id:tc.id||'',function:{name:'',arguments:''}};if(tc.id)_fixST[idx].id=tc.id;if(tc.function){if(tc.function.name)_fixST[idx].function.name+=tc.function.name;if(tc.function.arguments)_fixST[idx].function.arguments+=tc.function.arguments;}}}
             },'flow_supervisor');
-            _fixTB.classList.add('collapsed');_fixTT.textContent='[>] 修正思考 (第'+(_fr+1)+'轮)';
+            _fixTB.classList.add('collapsed');_fixTT.textContent='[>] 修正思考';
+
             var _fixP=[];var _fk=Object.keys(_fixST);
             for(var _fi=0;_fi<_fk.length;_fi++){var _stc=_fixST[_fk[_fi]];if(_stc&&_stc.function.name)_fixP.push({id:_stc.id,type:'function',function:_stc.function});}
             if(_fixP.length===0)break;
@@ -14075,19 +14067,20 @@ async function flowExecuteLoop(session, cs, taskId, messagesDiv){
           _critTB.id='flow-wkr-crit-thinking-'+session.iteration+'-er'+_er2+'-r'+_cr;
           var _critTT=document.createElement('div');_critTT.className='thinking-toggle';
           _critTT.id='flow-wkr-crit-thinking-toggle-'+session.iteration+'-er'+_er2+'-r'+_cr;
-          _critTT.textContent='[v] 审查思考 (第'+(_cr+1)+'轮)';
+          _critTT.textContent='[v] 审查思考';
           _critTT.setAttribute('data-target','flow-wkr-crit-thinking-'+session.iteration+'-er'+_er2+'-r'+_cr);
-          _critTT.setAttribute('data-collapse-label','[v] 审查思考 (第'+(_cr+1)+'轮)');
-          _critTT.setAttribute('data-expand-label','[>] 审查思考 (第'+(_cr+1)+'轮)');
+          _critTT.setAttribute('data-collapse-label','[v] 审查思考');
+          _critTT.setAttribute('data-expand-label','[>] 审查思考');
           _workerContentDiv.parentNode.insertBefore(_critTT,_workerContentDiv);
           _workerContentDiv.parentNode.insertBefore(_critTB,_workerContentDiv);_critLastEl=_critTB;
           await streamChatCompletion(critMsgs,workerTools,function(chunk){
             var delta=chunk.choices?chunk.choices[0].delta:null;
             if(delta&&delta.reasoning_content){_critSR+=delta.reasoning_content;_critTB.textContent=_critSR;}
-            if(delta&&delta.content){_critSC+=delta.content;_critiqueContent+=delta.content;_wCritBlock.block.textContent=' 审查中'+_wIterSuffix+' (第'+(_cr+1)+'轮)...\n\n'+_critiqueContent;}
+            if(delta&&delta.content){_critSC+=delta.content;_critiqueContent+=delta.content;_wCritBlock.block.textContent=' 审查中'+_wIterSuffix+'...\\n\\n'+_critiqueContent;}
             if(delta&&delta.tool_calls){for(var t=0;t<delta.tool_calls.length;t++){var tc=delta.tool_calls[t];var idx=tc.index!==undefined?tc.index:0;if(!_critST[idx])_critST[idx]={id:tc.id||'',function:{name:'',arguments:''}};if(tc.id)_critST[idx].id=tc.id;if(tc.function){if(tc.function.name)_critST[idx].function.name+=tc.function.name;if(tc.function.arguments)_critST[idx].function.arguments+=tc.function.arguments;}}}
           },'flow');
-          _critTB.classList.add('collapsed');_critTT.textContent='[>] 审查思考 (第'+(_cr+1)+'轮)';
+          _critTB.classList.add('collapsed');_critTT.textContent='[>] 审查思考';
+
           var _critP=[];var _ck=Object.keys(_critST);
           for(var _ci=0;_ci<_ck.length;_ci++){var _stc=_critST[_ck[_ci]];if(_stc&&_stc.function.name)_critP.push({id:_stc.id,type:'function',function:_stc.function});}
           if(_critP.length===0)break;
@@ -14117,19 +14110,20 @@ async function flowExecuteLoop(session, cs, taskId, messagesDiv){
           _fixTB.id='flow-wkr-fix-thinking-'+session.iteration+'-er'+_er2+'-r'+_fr;
           var _fixTT=document.createElement('div');_fixTT.className='thinking-toggle';
           _fixTT.id='flow-wkr-fix-thinking-toggle-'+session.iteration+'-er'+_er2+'-r'+_fr;
-          _fixTT.textContent='[v] 修正思考 (第'+(_fr+1)+'轮)';
+          _fixTT.textContent='[v] 修正思考';
           _fixTT.setAttribute('data-target','flow-wkr-fix-thinking-'+session.iteration+'-er'+_er2+'-r'+_fr);
-          _fixTT.setAttribute('data-collapse-label','[v] 修正思考 (第'+(_fr+1)+'轮)');
-          _fixTT.setAttribute('data-expand-label','[>] 修正思考 (第'+(_fr+1)+'轮)');
+          _fixTT.setAttribute('data-collapse-label','[v] 修正思考');
+          _fixTT.setAttribute('data-expand-label','[>] 修正思考');
           _workerContentDiv.parentNode.insertBefore(_fixTT,_workerContentDiv);
           _workerContentDiv.parentNode.insertBefore(_fixTB,_workerContentDiv);_fixLastEl=_fixTB;
           await streamChatCompletion(fixMsgs,workerTools,function(chunk){
             var delta=chunk.choices?chunk.choices[0].delta:null;
             if(delta&&delta.reasoning_content){_fixSR+=delta.reasoning_content;_fixTB.textContent=_fixSR;}
-            if(delta&&delta.content){_fixSC+=delta.content;_agentContent+=delta.content;var body=_workerContentDiv.querySelector('.msg-body');if(body)body.innerHTML=renderMarkdown(_agentContent);else _workerContentDiv.innerHTML=renderMarkdown(_agentContent);_injectCodeCopyButtons(_workerContentDiv);_wFixBlock.block.textContent=' 修正中'+_wIterSuffix+' (第'+(_fr+1)+'轮)...\n\n'+_agentContent;}
+            if(delta&&delta.content){_fixSC+=delta.content;_agentContent+=delta.content;var body=_workerContentDiv.querySelector('.msg-body');if(body)body.innerHTML=renderMarkdown(_agentContent);else _workerContentDiv.innerHTML=renderMarkdown(_agentContent);_injectCodeCopyButtons(_workerContentDiv);_wFixBlock.block.textContent=' 修正中'+_wIterSuffix+'...\\n\\n'+_agentContent;}
             if(delta&&delta.tool_calls){for(var t=0;t<delta.tool_calls.length;t++){var tc=delta.tool_calls[t];var idx=tc.index!==undefined?tc.index:0;if(!_fixST[idx])_fixST[idx]={id:tc.id||'',function:{name:'',arguments:''}};if(tc.id)_fixST[idx].id=tc.id;if(tc.function){if(tc.function.name)_fixST[idx].function.name+=tc.function.name;if(tc.function.arguments)_fixST[idx].function.arguments+=tc.function.arguments;}}}
           },'flow');
-          _fixTB.classList.add('collapsed');_fixTT.textContent='[>] 修正思考 (第'+(_fr+1)+'轮)';
+          _fixTB.classList.add('collapsed');_fixTT.textContent='[>] 修正思考';
+
           var _fixP=[];var _fk=Object.keys(_fixST);
           for(var _fi=0;_fi<_fk.length;_fi++){var _stc=_fixST[_fk[_fi]];if(_stc&&_stc.function.name)_fixP.push({id:_stc.id,type:'function',function:_stc.function});}
           if(_fixP.length===0)break;
