@@ -2921,7 +2921,8 @@ async function _compressOldMessages(messages,modelMaxTokens){
   var perMsg=[];
   for(var i=0;i<messages.length;i++){
     var m=messages[i];
-    var est=m._tokens&&m._tokens>0?m._tokens:Math.ceil(((m.content||'').length+(m.reasoning_content||'').length)*0.4);
+    var _charEst=Math.ceil(((m.content||'').length+(m.reasoning_content||'').length)*0.4);
+    var est=Math.max((m._tokens||0),_charEst);
     perMsg.push(est);
     totalEst+=est;
   }
@@ -6972,6 +6973,7 @@ function _buildLLMRequest(messages,tools,stream,source){
           else{_guide+=_tname+'结果('+(_cl2/1000).toFixed(0)+'K字符)'+(_paths.length>0?' | 路径:'+_paths.join(', '):'')+' | 可重新调用获取完整内容';}
           cleanedMessages[_mi2].content=_guide;
           cleanedMessages[_mi2]._tokens=Math.ceil(_guide.length*0.4);
+          messages[_mi2]._tokens=cleanedMessages[_mi2]._tokens;
           debugLogger.warn(' 兜底精炼: '+_tname+'('+(_cl2/1000).toFixed(0)+'K)→引导语句');
         }
       }
