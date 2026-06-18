@@ -6878,6 +6878,8 @@ class WorkerManager{
     this.worker=null;
     this.pendingRequests=new Map();
     this.restartCount=0;
+    this.totalCrashes=0;
+    this.fatal=false;
     this.maxRestarts=5;
     this.restartCooldown=10000;
     this.lastRestartTime=0;
@@ -6932,12 +6934,17 @@ class WorkerManager{
     }
   }
   handleCrash(){
+    this.totalCrashes=(this.totalCrashes||0)+1;
+    if(this.fatal)return;
     var now=Date.now();
     if(now-this.lastRestartTime<this.restartCooldown){this.restartCount++;}else{this.restartCount=1;}
     this.lastRestartTime=now;
-    if(this.restartCount>this.maxRestarts){
-      debugLogger.error(this.type+': 超过最大重启次数('+this.maxRestarts+')，已停止自动重启');
-      errorHandler.handle({code:'WORKER_CRASHED',message:this.type+'重启次数超限'},this.type);
+    if(this.totalCrashes>this.maxRestarts){
+      this.fatal=true;
+      if(this.worker){try{this.worker.terminate();}catch(e){}this.worker=null;}
+      if(this.type==='evo'){evoWorker=null;}
+      else if(this.type==='task'){taskWorker=null;}
+      errorHandler.handle({code:'WORKER_CRASHED',message:this.type+' 崩溃'+this.totalCrashes+'次，已停止重试。请刷新页面'},this.type);
       return;
     }
     if(this.worker){try{this.worker.terminate();}catch(e){}this.worker=null;}
@@ -6949,13 +6956,13 @@ class WorkerManager{
         pendingWorkerRequests.delete(k);
       }
     });
-    // 立即重建（首2次），多次崩溃才延迟避免循环
-    var delay=this.restartCount<=2?0:(this.restartCount-2)*500;
+    var delay=this.restartCount<=2?0:(this.restartCount-2)*1000;
     setTimeout(function(){
+      if(self.fatal)return;
       self.createWorker();
       if(self.type==='evo'){evoWorker=self.worker;}
       else if(self.type==='task'){taskWorker=self.worker;}
-      debugLogger.warn(self.type+' 已重启 (第'+self.restartCount+'次, 延迟'+delay+'ms)');
+      debugLogger.warn(self.type+' 已重启 (#'+self.totalCrashes+', '+delay+'ms)');
     },delay);
   }
   terminate(){
