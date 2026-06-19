@@ -1935,7 +1935,7 @@ var TOOL_REGISTRY={
   'longterm_memory':{name:'longterm_memory',description:'AI私人笔记。action:query/store/list/get/delete/update/batch_delete。',executor:'main_thread',
     parameters:{type:'object',properties:{action:{type:'string',enum:['query','store','list','get','delete','update','batch_delete']},query:{type:'string'},id:{type:'string'},ids:{type:'array',items:{type:'string'}},fact:{type:'object',properties:{text:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','用户偏好','项目设定','技术决策','对话总结','其他']}}},entries:{type:'array',items:{type:'object',properties:{text:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','用户偏好','项目设定','技术决策','对话总结','其他']}}}},limit:{type:'number',default:5,maximum:20}},required:['action']}},
   'knowledge_base':{name:'knowledge_base',description:'用户知识库(用户传你读)。action:query/list/get/store/update/delete。',executor:'main_thread',
-    parameters:{type:'object',properties:{action:{type:'string',enum:['query','list','get','store','update','delete'],default:'query'},query:{type:'string'},id:{type:'string'},entry:{type:'object',properties:{title:{type:'string'},content:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','其他']}}},entries:{type:'array',items:{type:'object',properties:{title:{type:'string'},content:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','其他']}}}},limit:{type:'number',default:3,maximum:10}},required:['action']}},
+    parameters:{type:'object',properties:{action:{type:'string',enum:['query','list','get','store','update','delete','batch_delete'],default:'query'},query:{type:'string'},id:{type:'string'},entry:{type:'object',properties:{title:{type:'string'},content:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','其他']}}},entries:{type:'array',items:{type:'object',properties:{title:{type:'string'},content:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','其他']}}}},limit:{type:'number',default:3,maximum:10}},required:['action']}},
   'chart':{name:'chart',description:'ECharts图表。type:bar/line/area/pie/scatter/radar/funnel/gauge/heatmap/treemap/sankey。',executor:'main_thread',
     parameters:{type:'object',properties:{type:{type:'string',enum:['bar','line','area','pie','scatter','radar','funnel','gauge','heatmap','treemap','sankey']},title:{type:'string'},data:{type:'object'},options:{type:'object'}},required:['type','data']}},
   'diagram':{name:'diagram',description:'Mermaid图表。type:flowchart/sequence/state/class/gantt/pie。',executor:'main_thread',
@@ -9905,23 +9905,26 @@ async function toolLongtermMemory(args){
   if(args.action==='store'){
     var entries=args.entries||(args.fact?[args.fact]:null);
     if(!entries||!entries.length)return '请指定 fact(单条) 或 entries(批量)';
-    var results=[];
+    var results=[], skipped=[];
     for(var ei=0;ei<entries.length;ei++){
-      var factInput=entries[ei];
-      if(!factInput.text)continue;
+      var fi=entries[ei];
+      var text=fi.text||fi.content||'';  // 兼容知识库 schema
+      if(!text){skipped.push('['+ei+']缺text字段'); continue;}
       var fId='mem_'+Date.now()+'_'+Math.random().toString(36).substr(2,8);
       var embedding=null;
       try{
-        var embResp2=await sendToTaskWorker('embed',{text:factInput.text.substring(0,500)});
+        var embResp2=await sendToTaskWorker('embed',{text:text.substring(0,500)});
         if(embResp2&&embResp2.data&&Array.isArray(embResp2.data)&&embResp2.data.length===384)embedding=embResp2.data;
       }catch(e){}
-      var factObj={id:fId,text:factInput.text,category:factInput.category||'其他',embedding:embedding,ts:Date.now()};
+      var factObj={id:fId,text:text,category:fi.category||'其他',embedding:embedding,ts:Date.now()};
       facts.push(factObj);
       results.push(fId);
     }
     await _saveLongTermMemory();
-    if(results.length===1)return '已存入记忆 [ID:'+results[0]+']';
-    return ' 批量存入 '+results.length+' 条记忆。ID: '+results.join(', ');
+    var out=results.length+'/'+entries.length+' 条: ID '+results.join(', ');
+    if(results.length===1)out=' 已存入记忆 [ID:'+results[0]+']';
+    if(skipped.length)out+=' | ⚠️跳过'+skipped.length+'条: '+skipped.join(', ');
+    return out;
   }
 
   // ── batch_delete：批量删除 ──
@@ -10014,15 +10017,21 @@ async function toolKnowledgeBase(args){
   if(action==='store'){
     var entries=args.entries||(args.entry?[args.entry]:null);
     if(!entries||!entries.length)return '请指定 entry(单条) 或 entries(批量数组)';
-    var ids=[];
+    var ids=[], skipped=[];
     for(var ei=0;ei<entries.length;ei++){
       var e=entries[ei];
-      if(!e.title||!e.content)continue;
-      var entry=await kbAddEntry(e.title,e.content,e.category||'其他','agent');
+      var title=e.title||'';
+      var content=e.content||e.text||'';  // 兼容记忆库 schema
+      if(!title&&!content){skipped.push('['+ei+']缺title+content'); continue;}
+      if(!title){skipped.push('['+ei+']缺title'); continue;}
+      if(!content){skipped.push('['+ei+']缺content'); continue;}
+      var entry=await kbAddEntry(title,content,e.category||'其他','agent');
       ids.push(entry.id);
     }
-    if(ids.length===1)return ' 已创建知识条目 [ID:'+ids[0]+']';
-    return ' 批量创建 '+ids.length+' 条知识条目。ID: '+ids.join(', ');
+    var out=ids.length+'/'+entries.length+' 条: ID '+ids.join(', ');
+    if(ids.length===1)out=' 已创建知识条目 [ID:'+ids[0]+']';
+    if(skipped.length)out+=' | ⚠️跳过'+skipped.length+'条: '+skipped.join(', ');
+    return out;
   }
   // ── update：修改条目（只能修改 source=='agent' 的） ──
   if(action==='update'){
@@ -10048,7 +10057,25 @@ async function toolKnowledgeBase(args){
     await kbDeleteEntry(args.id);
     return '已删除知识条目「'+title+'」[ID:'+args.id+'] ';
   }
-  return '未知action: '+action+'，支持 query/list/get/store/update/delete';
+  // ── batch_delete：批量删除 ──
+  if(action==='batch_delete'){
+    var ids=args.ids||[];
+    if(!ids.length)return '请指定 ids 数组';
+    var allEntries=await _loadKB();
+    var deleted=0, notFound=[];
+    for(var di=allEntries.length-1;di>=0;di--){
+      if(ids.indexOf(allEntries[di].id)>=0){
+        if(allEntries[di].source==='agent'){
+          await kbDeleteEntry(allEntries[di].id);
+          deleted++;
+        }else{notFound.push(allEntries[di].id+'('+allEntries[di].source+')');}
+      }
+    }
+    var out=' 批量删除 '+deleted+'/'+ids.length+' 条知识条目';
+    if(notFound.length)out+=' | ⚠️跳过'+notFound.length+'条(非agent来源): '+notFound.join(', ');
+    return out;
+  }
+  return '未知action: '+action+'，支持 query/list/get/store/update/delete/batch_delete';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -13849,10 +13876,17 @@ async function processUserMessage(userText,taskId){
       var streamToolCalls={};
       var hasStreamContent=false;
       // ★ RAF节流：每帧最多一次渲染+一次滚动，仅近底时自动跟底
-      var _renderPending=false,_scrollPending=false,_latestAgentContent='';
+      var _renderPending=false,_scrollPending=false,_latestAgentContent='',_userScrolledUp=false;
       function _isNearBottom(el){return el.scrollHeight-el.scrollTop-el.clientHeight<120;}
+      // 监听用户主动上滑：一旦离开底部，标记 _userScrolledUp，停止自动跟滚
+      function _onUserScroll(){
+        if(!_isNearBottom(messagesDiv)){_userScrolledUp=true;}
+        else{_userScrolledUp=false;}
+      }
+      messagesDiv.addEventListener('scroll',_onUserScroll,{passive:true});
       function _scheduleStreamRender(){
         if(_renderPending)return;_renderPending=true;
+        var _wasAtBottom=!_userScrolledUp&&_isNearBottom(messagesDiv);  // 内容变化前快照
         requestAnimationFrame(function(){
           _renderPending=false;
           var body2=contentDiv.querySelector('.msg-body');
@@ -13862,21 +13896,21 @@ async function processUserMessage(userText,taskId){
           if(contentDiv.classList.contains('streaming-cursor')){
             contentDiv.classList.remove('streaming-cursor');
           }
-          if(!_scrollPending&&_isNearBottom(messagesDiv)){
+          if(_wasAtBottom&&!_scrollPending){
             _scrollPending=true;
             requestAnimationFrame(function(){
               _scrollPending=false;
-              if(_isNearBottom(messagesDiv))messagesDiv.scrollTop=messagesDiv.scrollHeight;
+              messagesDiv.scrollTop=messagesDiv.scrollHeight;
             });
           }
         });
       }
       function _scheduleStreamScroll(){
-        if(!_scrollPending&&_isNearBottom(messagesDiv)){
+        if(!_userScrolledUp&&!_scrollPending&&_isNearBottom(messagesDiv)){
           _scrollPending=true;
           requestAnimationFrame(function(){
             _scrollPending=false;
-            if(_isNearBottom(messagesDiv))messagesDiv.scrollTop=messagesDiv.scrollHeight;
+            messagesDiv.scrollTop=messagesDiv.scrollHeight;
           });
         }
       }
@@ -17794,7 +17828,18 @@ function _collectBubbles(msgList){
     var copyBtns=b.querySelectorAll('.code-copy-btn');
     for(var cbi=0;cbi<copyBtns.length;cbi++)copyBtns[cbi].remove();
     if(isUser){entry.content=cd.textContent||cd.innerText||'';}
-    else{entry.content=b.innerHTML||'';}
+    else{
+      // 克隆气泡，剔除思考块/反馈按钮/时间戳后再取 innerHTML
+      var clone=b.cloneNode(true);
+      var _strip=clone.querySelectorAll('.thinking-block,.thinking-toggle,.message-timestamp,[style*="display:flex;gap:4px;margin-top:4px"]');
+      for(var si=_strip.length-1;si>=0;si--){var _s=_strip[si];if(_s.parentNode)_s.parentNode.removeChild(_s);}
+      entry.content=clone.innerHTML||'';
+      // 额外保存纯文本 cleanContent，供上下文构建使用
+      var _cdClone=cd.cloneNode(true);
+      var _cStrip=_cdClone.querySelectorAll('.thinking-block,.thinking-toggle,.message-files-card,.msg-actions,.code-copy-btn');
+      for(var _csi=_cStrip.length-1;_csi>=0;_csi--){var _cs=_cStrip[_csi];if(_cs.parentNode)_cs.parentNode.removeChild(_cs);}
+      entry.cleanContent=_cdClone.textContent||_cdClone.innerText||'';
+    }
     _addMsgActions(b,isUser);
     items.push(entry);
   }
@@ -18104,27 +18149,61 @@ processUserMessage=async function(userText,taskId){
   if(currentConversationId){
     setTimeout(function(){saveCurrentMessages();},800);
     var conv=conversationDB.entries.find(function(e){return e.id===currentConversationId;});
-    if(conv&&conv.title==='新对话'){
-      // AI自动命名: 从agent最后一条回复提取摘要
-      setTimeout(function(){
-        try{
-          var msgList=document.getElementById('messagesList');
-          if(!msgList)return;
-          var bubbles=msgList.querySelectorAll('.message.agent .message-content');
-          if(bubbles.length>0){
-            var lastReply=bubbles[bubbles.length-1].textContent||bubbles[bubbles.length-1].innerText||'';
-            var title=lastReply.replace(/[\n\r]+/g,' ').replace(/\s+/g,' ').trim().substring(0,30);
-            if(!title||title.length<2)title=userText.trim().substring(0,30);
-            if(title&&!_deletedConvIds.has(conv.id)){
-              conv.title=title;
-              conv.updatedAt=Date.now();
-              saveConversationToDB(conv);
-              renderConversationList();
-            }
-          }
-        }catch(e){}
-      },1500);
-    }else if(conv){
+if(conv&&conv.title==='新对话'){
+  setTimeout(async function(){
+    try{
+      var title=null;
+      // ── API 标题生成 ──
+      try{
+        var apiKey=settings.deepseek_api_key;
+        if(!apiKey)throw 0;
+        var titlePrompt=[
+          {role:'system',content:
+            '[ROLE] 标题生成器 · 输入=用户首条消息 · 输出=≤20字标题\n'+
+            '\n'+
+            '[FORMAT]\n'+
+            '<TITLE>标题</TITLE>\n'+
+            '\n'+
+            '[EXAMPLES]\n'+
+            'IN: 帮我搜最近好吃的零食推荐\n'+
+            'OUT: <TITLE>零食推荐搜索</TITLE>\n'+
+            'IN: Python爬虫怎么绕过Cloudflare验证\n'+
+            'OUT: <TITLE>Python绕过Cloudflare</TITLE>\n'+
+            'IN: 用React写一个todo list组件\n'+
+            'OUT: <TITLE>React Todo组件开发</TITLE>\n'+
+            '\n'+
+            '[RULE]\n'+
+            '· 仅输出<TITLE>标签 · 禁止引号/标点/换行/解释 · 禁止[GRADE]等元标记'},
+          {role:'user',content:'IN: '+userText.trim().substring(0,200)}
+        ];
+        var req=_buildLLMRequest(titlePrompt,null,false,'title');
+        req.body.temperature=0.2;
+        req.body.max_tokens=36;
+        req.body.thinking={type:'disabled'};
+        var resp=await fetch(req.baseUrl+'/v1/chat/completions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+req.apiKey},
+          body:JSON.stringify(req.body)
+        });
+        if(resp.ok){
+          var data=await resp.json();
+          var raw=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||'';
+          var m=raw.match(/<TITLE>([\s\S]*?)<\/TITLE>/i);
+          title=m?m[1].replace(/\[GRADE:L\d\]/gi,'').replace(/["'「」""''【】✅▸●◆★]/g,'').replace(/\s+/g,' ').trim():'';
+        }
+      }catch(_){}
+      // ── Fallback ──
+      if(!title||title.length<2)title=userText.trim().replace(/[\n\r]+/g,' ').replace(/\s+/g,' ').substring(0,30);
+      if(!title||title.length<2)title='新对话';
+      if(!_deletedConvIds.has(conv.id)){
+        conv.title=title;
+        conv.updatedAt=Date.now();
+        saveConversationToDB(conv);
+        renderConversationList();
+      }
+    }catch(e){}
+  },1500);
+}else if(conv){
       conv.updatedAt=Date.now();
       saveConversationToDB(conv);
     }
