@@ -14574,6 +14574,10 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
 
     // 最终渲染
     var body3=contentDiv.querySelector('.msg-body');
+    // ★ 修复：若正文仅为[GRADE:Lx]标签，回退到思考内容
+    if(agentContent.trim()&&/^\[GRADE:L\d\][\s\S]{0,80}$/.test(agentContent.trim())&&typeof streamReasoning!=='undefined'&&streamReasoning.trim()){
+      agentContent=streamReasoning.trim();
+    }
     if(agentContent.trim()){
       if(body3)body3.innerHTML=renderMarkdown(agentContent);
       else contentDiv.innerHTML=renderMarkdown(agentContent);
@@ -14581,8 +14585,14 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
       if(body3)body3.innerHTML='<em style=\"color:#888\">已执行工具，见下方产物。</em>';
       else contentDiv.innerHTML='<em style=\"color:#888\">已执行工具，见下方产物。</em>';
     }else{
-      if(body3)body3.innerHTML='<em style=\"color:#888\">（无响应内容）</em>';
-      else contentDiv.innerHTML='<em style=\"color:#888\">（无响应内容）</em>';
+      // ★ 修复：若无正文但有思考内容，用思考内容代替
+      if(typeof streamReasoning!=='undefined'&&streamReasoning.trim()){
+        if(body3)body3.innerHTML=renderMarkdown(streamReasoning.trim());
+        else contentDiv.innerHTML=renderMarkdown(streamReasoning.trim());
+      }else{
+        if(body3)body3.innerHTML='<em style=\"color:#888\">（无响应内容）</em>';
+        else contentDiv.innerHTML='<em style=\"color:#888\">（无响应内容）</em>';
+      }
     }
 
     // 折叠所有轮次的思考块（它们已在流式期间随 updateThinkingBlock 按 round 创建好）
@@ -18142,6 +18152,16 @@ function _collectBubbles(msgList){
       var _cStrip=_cdClone.querySelectorAll('.thinking-block,.thinking-toggle,.message-files-card,.msg-actions,.code-copy-btn');
       for(var _csi=_cStrip.length-1;_csi>=0;_csi--){var _cs=_cStrip[_csi];if(_cs.parentNode)_cs.parentNode.removeChild(_cs);}
       entry.cleanContent=_cdClone.textContent||_cdClone.innerText||'';
+      // ★ 修复：剔除思考块后若正文仅剩[GRADE:Lx]标签(<120字)，保留完整气泡含思考内容
+      var _gradeTest=(cd.textContent||cd.innerText||'').replace(/\s+/g,' ').trim();
+      if(/^\[GRADE:L\d\]/.test(_gradeTest)&&_gradeTest.length<120){
+        var _fullClone=b.cloneNode(true);
+        var _fa=_fullClone.querySelector('.msg-actions');if(_fa)_fa.remove();
+        var _fcb=_fullClone.querySelectorAll('.code-copy-btn');
+        for(var _fi=0;_fi<_fcb.length;_fi++)_fcb[_fi].remove();
+        entry.content=_fullClone.innerHTML||'';
+        entry.cleanContent=_fullClone.textContent||_fullClone.innerText||'';
+      }
     }
     _addMsgActions(b,isUser);
     items.push(entry);
