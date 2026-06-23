@@ -3079,6 +3079,7 @@ var EXTERNAL_LIBRARIES={
   'katex':{urls:['https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js','https://unpkg.com/katex@0.16/dist/katex.min.js','https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js'],cssUrls:['https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css','https://unpkg.com/katex@0.16/dist/katex.min.css','https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css'],global:'katex',required:false,loadOnStart:false},
   'highlight':{urls:['https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js','https://unpkg.com/@highlightjs/cdn-assets@11.9.0/highlight.min.js','https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'],cssUrls:['https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/github.min.css','https://unpkg.com/@highlightjs/cdn-assets@11.9.0/styles/github.min.css','https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css'],global:'hljs',required:false,loadOnStart:false},
   'mermaid':{urls:['https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js','https://unpkg.com/mermaid@10/dist/mermaid.min.js','https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js'],global:'mermaid',required:false,loadOnStart:false},
+  'dompurify':{urls:['https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js','https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js','https://unpkg.com/dompurify@3.2.4/dist/purify.min.js'],global:'DOMPurify',required:true,loadOnStart:true},
   'echarts':{urls:['https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js','https://unpkg.com/echarts@5/dist/echarts.min.js','https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js'],global:'echarts',required:false,loadOnStart:false},
   'xlsx':{urls:['https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js','https://cdn.jsdelivr.net/npm/xlsx@0.20.1/dist/xlsx.full.min.js','https://unpkg.com/xlsx@0.20.1/dist/xlsx.full.min.js'],global:'XLSX',required:false,loadOnStart:false},
   'docx':{urls:['https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js','https://unpkg.com/docx@8.5.0/build/index.umd.min.js','https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js'],global:'docx',altGlobals:['Docx'],required:false,loadOnStart:false},
@@ -5763,6 +5764,7 @@ function renderMarkdown(text){
   }
   // ★ 代码块复制按钮（HTML注入后调用 _injectCodeCopyButtons 操作DOM）
   html=html.replace(/<pre><code/g,'<pre class="code-block-wrapper"><code');
+  if(window.DOMPurify){html=DOMPurify.sanitize(html);}
   return html;
 }
 
@@ -5784,6 +5786,7 @@ var _DANGEROUS_HREF=/^(javascript|data\s*:|vbscript):/i;
 
 function sanitizeArtifactHTML(html){
   if(!html||typeof html!=='string')return '';
+  if(window.DOMPurify){return DOMPurify.sanitize(html);}
   var doc=new DOMParser().parseFromString(html,'text/html');
   var body=doc.body;
   _sanitizeNode(body);
