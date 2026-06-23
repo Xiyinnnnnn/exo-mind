@@ -14069,11 +14069,14 @@ async function processUserMessage(userText,taskId){
       var hasStreamContent=false;
       // ★ RAF节流：每帧最多一次渲染+一次滚动，仅近底时自动跟底
       var _renderPending=false,_scrollPending=false,_latestAgentContent='',_userScrolledUp=false;
+      var _lastKnownScrollTop=messagesDiv.scrollTop;
       function _isNearBottom(el){return el.scrollHeight-el.scrollTop-el.clientHeight<120;}
-      // 监听用户主动上滑：一旦离开底部，标记 _userScrolledUp，停止自动跟滚
+      // 基于滚动方向判断用户意图：向上滚立即停跟底，滚回最底部才恢复
       function _onUserScroll(){
-        if(!_isNearBottom(messagesDiv)){_userScrolledUp=true;}
-        else{_userScrolledUp=false;}
+        var st=messagesDiv.scrollTop;
+        if(st<_lastKnownScrollTop){_userScrolledUp=true;}
+        else if(st>_lastKnownScrollTop&&messagesDiv.scrollHeight-st-messagesDiv.clientHeight<5){_userScrolledUp=false;}
+        _lastKnownScrollTop=st;
       }
       messagesDiv.addEventListener('scroll',_onUserScroll,{passive:true});
       function _scheduleStreamRender(){
@@ -14288,6 +14291,7 @@ async function processUserMessage(userText,taskId){
       var roundToggle = document.getElementById('thinking-toggle-' + agentMsgDiv._msgId + '-r' + round);
       if (roundToggle) roundToggle.textContent = roundToggle.textContent.replace('[v]', '[>]');
     }
+    messagesDiv.removeEventListener('scroll',_onUserScroll);
 
     // ===== 自评估：1轮审查→修正 =====
     var _intensity = settings.honesty_intensity != null ? settings.honesty_intensity : 0;
