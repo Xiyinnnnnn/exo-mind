@@ -1882,12 +1882,13 @@ async function toolSemanticMemory(args){
   var experiences=await searchSimilarExperiences(query,limit);
   if(!experiences||experiences.length===0)return '未找到语义相似的过往经验。对话历史中尚未有与「'+query+'」含义相近的记录。';
   return experiences.map(function(exp,i){
-    return (i+1)+'. [语义相似度: '+(exp.similarity*100).toFixed(0)+'%] '+(exp.text.length>2000?exp.text.substring(0,2000)+'\n...(以上为前2000字摘要，全文'+exp.text.length+'字。使用 filesystem create /downloads/memory_fragment.md 写入完整内容后 filesystem read 读取)':exp.text);
+    var preview=smartTruncate(exp.text,2000);
+    return (i+1)+'. [语义相似度: '+(exp.similarity*100).toFixed(0)+'%] '+preview+(preview.length<exp.text.length?'\n...(全文共'+exp.text.length+'字。使用 filesystem create /downloads/memory_fragment.md 写入完整内容后 filesystem read 读取)':'');
   }).join('\n\n');
 	}
 
 // ═══════════════════════════════════════════════════════════════
-// code_run VFS 权限配置（快照注入+选择性回写）
+// code_run 文件系统权限配置（快照注入+选择性回写）
 // ═══════════════════════════════════════════════════════════════
 var CODE_RUN_FS_ACCESS={
   '/config/':    'none',
@@ -1916,7 +1917,7 @@ function getCodeRunPermission(filePath){
 var TOOL_REGISTRY={
   'help':{name:'help',description:'工具管理。action:query/list/set/get/unset。扩展工具需help set载入后才可调用。',executor:'main_thread',
     parameters:{type:'object',properties:{action:{type:'string',enum:['query','list','set','get','unset'],default:'list'},query:{type:'string',description:'语义搜索(action=query必填)'},limit:{type:'number',default:5,maximum:10},tool_name:{type:'string',description:'工具名(action=set/get/unset时必填)'},id:{type:'string',description:'工具名别名(同tool_name)'}},required:[]}},
-  'filesystem':{name:'filesystem',description:'VFS文件系统。action:create/read/update/delete/list/tree/append/insert/delete_lines/replace_lines/code_run/rename。行操作从大到小排序。code_run沙箱可读写VFS。',executor:'main_thread',
+  'filesystem':{name:'filesystem',description:'文件系统。先用fuzzy_search搜文件名或搜内容定位，再用read按行号精读，必要时才全文。action:create/read/update/delete/list/tree/append/insert/delete_lines/replace_lines/code_run/rename。行操作从大到小排序。code_run沙箱可读写文件系统。',executor:'main_thread',
     parameters:{type:'object',properties:{action:{type:'string',enum:['create','read','update','delete','list','tree','append','insert','delete_lines','replace_lines','code_run','rename','move','copy']},path:{type:'string',description:'路径。上传文件在/uploads/'},content:{type:'string',description:'内容。replace_lines/insert的content按\\n拆分'},line:{type:'number',description:'行号(1-based)'},endLine:{type:'number',description:'结束行(含),0=末尾'},maxLines:{type:'number',default:1000,maximum:1000},mode:{type:'string',enum:['auto','chunked','full'],default:'auto'},full_max_bytes:{type:'number',default:65536},new_name:{type:'string'},overwrite:{type:'boolean',default:false},safe:{type:'boolean',default:true},depth:{type:'number'},timeout:{type:'number',default:10000},sandbox_dir:{type:'string',description:'沙箱工作目录(默认/sandbox/)'}},required:['action','path']}},
   'search':{name:'search',description:'网络搜索(Tavily)。返回标题/URL/摘要。可选include_raw_content抓原文。',executor:'task_worker',
     parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词'},max_results:{type:'number',default:5,maximum:10},search_depth:{type:'string',enum:['basic','advanced'],default:'advanced'},include_raw_content:{type:'boolean',default:false},include_domains:{type:'array',items:{type:'string'}},exclude_domains:{type:'array',items:{type:'string'}}},required:['query']}},
@@ -1940,8 +1941,8 @@ var TOOL_REGISTRY={
     parameters:{type:'object',properties:{headers:{type:'array',items:{type:'string'}},rows:{type:'array',items:{type:'array',items:{type:'string'}}},download_format:{type:'string',enum:['csv','xlsx',null]}},required:['headers','rows']}},
   'word_generator':{name:'word_generator',description:'生成Word(.docx)。content用Markdown。',executor:'main_thread',
     parameters:{type:'object',properties:{title:{type:'string'},content:{type:'string',description:'Markdown'},filename:{type:'string',description:'不含扩展名'}},required:['title','content']}},
-  'fuzzy_search':{name:'fuzzy_search',description:'文件内模糊搜索(Fuse.js)。搜VFS内文件内容，非网络。可限定file或path。',executor:'task_worker',
-    parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词(仅匹配内容不匹配文件名)'},file:{type:'string',description:'限定单文件，如/uploads/a.txt(传此忽略path)'},path:{type:'string',default:'/',description:'限定目录前缀，默认/'},limit:{type:'number',default:10,description:'返回条数默认10'}},required:['query','file']}},
+  'fuzzy_search':{name:'fuzzy_search',description:'文件读取第一步：模糊搜索定位。有file搜文件内容(Fuse.js+行号)，仅path搜该路径下文件名。用filesystem read按行号精读。',executor:'task_worker',
+    parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词。有file搜内容，仅path搜文件名'},file:{type:'string',description:'搜文件内容(传此搜内容+行号)'},path:{type:'string',default:'/',description:'搜文件名(仅无file时生效)'},limit:{type:'number',default:10,description:'返回条数默认10'}},required:['query']}},
   'mcts_plan':{name:'mcts_plan',description:'MCTS多步规划。mode:fast(150sims)/standard(600sims,thinking)。',executor:'main_thread',
     parameters:{type:'object',properties:{problem:{type:'string'},goal:{type:'string'},constraints:{type:'string'},mode:{type:'string',enum:['fast','standard'],default:'fast'}},required:['problem','goal']}},
   'ocr':{name:'ocr',description:'图片OCR(Tesseract)。传filename或image_base64。结果存.ocr.txt。',executor:'task_worker',
@@ -2111,12 +2112,12 @@ chart / diagram / svg_animator / table_generator / word_generator / mcts_plan / 
 | rename | 重命名 | path, new_name, overwrite |
 | move | 移动文件 | path, new_path, overwrite |
 | copy | 复制文件 | path, new_path, overwrite |
-| code_run | 执行代码(可读写VFS) | path(.js或.py), timeout(默认10s), sandbox_dir |
+| code_run | 执行代码(可读写文件系统) | path(.js或.py), timeout(默认10s), sandbox_dir |
 
-### read 模式 (mode)
+### read 读取策略（推荐流程：fuzzy_search定位 → chunked按行号精读 → 必要时full全文）
+- **chunked**: 按行号分块精读, 需 line/maxLines, 带行号。fuzzy_search返回行号后据此读取
 - **auto**(默认): 小文件全量返回; 传line/endLine时自动切换chunked
-- **chunked**: 按行分块, 需 line/maxLines, 带行号
-- **full**: 强制全量, 受 full_max_bytes 限制(默认2MB)
+- **full**: 强制全量, 受 full_max_bytes 限制(默认2MB)。仅在确需通读全文时使用
 
 ### 最小示例
 `+"`"+`filesystem action="read" path="/uploads/report.pdf"`+"`"+`
@@ -2131,8 +2132,8 @@ chart / diagram / svg_animator / table_generator / word_generator / mcts_plan / 
 `+"`"+`filesystem action="code_run" path="/downloads/script.py"`+"`"+`
 
 
-### code_run VFS权限
-沙箱内代码可读写虚拟文件系统，受权限控制：
+### code_run 文件系统权限
+沙箱内代码可读写文件系统，受权限控制：
 - /config/、/memory/、/pipelines/、/trash/ —  不可见
 - /uploads/ —  只读可读取
 - /downloads/、/sandbox/、/tmp/ —  可读写
@@ -2396,21 +2397,22 @@ SVG会被安全检查，禁止: on*事件、<script>、javascript:、<foreignObj
 - 输出路径: /downloads/{filename}.docx (或 .doc)`,
 
   'fuzzy_search':`## fuzzy_search — 模糊搜索
-对虚拟文件系统中的文件内容进行模糊搜索(Fuse.js)。超长文件(>120K字符)自动分段搜索(重叠2K防边界截断)。压缩文件自动解压后搜索。
+两种模式：①传file搜文件内容(Fuse.js,返回行号) ②仅传path搜该路径下文件名。
 
 ### 参数
-- **query**: 搜索关键词(支持模糊匹配,仅匹配文件内容不匹配文件名)
-- **file**: 限定单个文件路径(精确匹配), 传此参数时忽略 path
-- **path**: 限定搜索目录(前缀匹配), 默认根目录 /
-- **limit**: 返回结果数, 默认10
+- **query**: 搜索关键词。有file→搜内容,仅path→搜文件名(大小写不敏感)
+- **file**: 搜文件内容(传此进入内容搜索模式,返回行号)
+- **path**: 搜文件名(仅在无file时生效,前缀匹配), 默认 /
+- **limit**: 返回条数, 默认10
 
 ### 最小示例
-`+"`"+`fuzzy_search query="数据库连接"`+"`"+`
-`+"`"+`fuzzy_search query="API" file="/uploads/doc.md"`+"`"+`
-`+"`"+`fuzzy_search query="配置" path="/downloads" limit=5`+"`"+`
+`+"`"+`fuzzy_search query="index" path="/uploads"`+"`"+` (搜文件名)
+`+"`"+`fuzzy_search query="数据库" file="/uploads/doc.md"`+"`"+` (搜文件内容+行号)
+`+"`"+`fuzzy_search query="API" file="/uploads/api.js" limit=5`+"`"+`
 ### 注意事项
-- 结果含文件路径+相关性评分+匹配片段
-- 用 filesystem read <路径> line=<行号> 定位精确位置`,
+- 文件名模式：返回匹配文件路径。下一步用 filesystem read <路径> 按行号精读
+- 内容模式：返回文件路径+相关性评分+行号+匹配片段。下一步按行号精读
+- 原则：先模糊搜索定位 → 按行号精读 → 必要时才全文。避免无谓全量读取`,
 
   'mcts_plan':`## mcts_plan — MCTS推理规划
 多步推理规划引擎。使用蒙特卡洛树搜索(MCTS)探索决策路径并评估。
@@ -4022,6 +4024,14 @@ function cosineSimilarity(vecA,vecB){
   return dotProduct/(Math.sqrt(normA)*Math.sqrt(normB));
 }
 
+function smartTruncate(text,maxLen){
+  if(!text||text.length<=maxLen)return text||'';
+  var s=text.substring(0,maxLen);
+  var m=s.match(/[。！？\n.?!](?=[^。！？\n.?!]*$)/);
+  if(m)s=s.substring(0,m.index+1);
+  return s;
+}
+
 function estimateTokenCount(text){
   if(!text)return 0;
   var chineseChars=(text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g)||[]).length;
@@ -4243,7 +4253,7 @@ async function getFileMeta(path){
   return {path:record.path,size:record.size,created_at:record.created_at,updated_at:record.updated_at,accessed_at:record.accessed_at,compressed:record.compressed,isDir:record.content==='__DIR__'};
 }
 
-// === code_run 辅助：列出所有VFS路径 ===
+// === code_run 辅助：列出所有文件系统路径 ===
 async function listAllVfsPaths(){
   var d=await getDB();
   return new Promise(function(resolve,reject){
@@ -4262,7 +4272,7 @@ async function listAllVfsPaths(){
   });
 }
 
-// === code_run 辅助：按白名单收集VFS快照 ===
+// === code_run 辅助：按白名单收集文件系统快照 ===
 async function collectVfsSnapshot(sandboxDir){
   var snapshot={};
   var allPaths=await listAllVfsPaths();
@@ -6357,7 +6367,7 @@ function buildTaskWorkerSource(){
   src+='};\n';
   src+='\n';
   
-  // === executeCode - JS(无沙箱直接执行)+Python(Pyodide)+VFS快照 ===
+  // === executeCode - JS(无沙箱直接执行)+Python(Pyodide)+文件系统快照 ===
   src+='async function executeCode(params){\n';
   src+='  var language=params.language,code=params.code,timeout=params.timeout||10000;\n';
   src+='  var fsSnapshot=params.fs_snapshot||{};\n';
@@ -6871,11 +6881,12 @@ src+='  }\n';
   src+='  try{\n';
   src+='    await loadScript("fuse",["https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js","https://unpkg.com/fuse.js@7.0.0/dist/fuse.min.js"],"Fuse");\n';
   src+='    if(typeof Fuse==="undefined")return [];\n';
-  src+='    // ★ 只搜内容不搜文件名，避免文件名干扰代码/字段搜索\n';
-  src+='    var fuse=new Fuse(files,{keys:["content"],threshold:0.4,includeScore:true,minMatchCharLength:2});\n';
+  src+='    // ★ 内容搜索模式(仅file模式调用,文件名搜索在主线程完成)\n';
+  src+='    var th=query.length<=2?0.8:query.length<=4?0.6:0.4;\n';
+  src+='    var fuse=new Fuse(files,{keys:["content"],threshold:th,includeScore:true,includeMatches:true,minMatchCharLength:1});\n';
   src+='    var results=fuse.search(query).slice(0,limit);\n';
-  src+='    return results.map(function(r){return {file:r.item.name,path:r.item.path,score:Math.round(r.score*100)/100,snippet:(r.item.content||"").substring(0,200)+"..."}});\n';
-  src+='  }catch(e){self.postMessage({type:"log",payload:{level:"warn",message:"[任务Worker] fuzzy_search 执行失败: "+e.message}});return [{file:"(搜索错误)",path:"",score:0,snippet:"fuzzy_search 内部错误: "+e.message}]}\n';
+  src+='    return results.map(function(r){var c=r.item.content||"";var ln=1;if(r.matches&&r.matches[0]&&r.matches[0].indices&&r.matches[0].indices[0]){ln=c.substring(0,r.matches[0].indices[0][0]).split("\\n").length;}return {file:r.item.name,path:r.item.path,score:Math.round(r.score*100)/100,line:ln,snippet:c.substring(0,200)+"..."}});\n';
+  src+='  }catch(e){self.postMessage({type:"log",payload:{level:"warn",message:"[任务Worker] fuzzy_search 执行失败: "+e.message}});return [{file:"(搜索错误)",path:"",score:0,line:1,snippet:"fuzzy_search 内部错误: "+e.message}]}\n';
   src+='}\n';
   src+='\n';
   
@@ -7745,7 +7756,7 @@ function _buildLLMRequest(messages,tools,stream,source){
           var _pm=(cleanedMessages[_mi2].content||'').match(/\/[\w\/\.\-\u4e00-\u9fff]+/g);
           if(_pm){for(var _pi=0;_pi<Math.min(_pm.length,3);_pi++){if(_paths.indexOf(_pm[_pi])<0)_paths.push(_pm[_pi]);}_bpath=_pm[0];}
           var _guide='[已精炼] ';
-          if(_tname==='filesystem'){_guide+='文件在VFS中 | 路径:'+(_paths.join(', ')||_bpath||'未知')+' | 用 filesystem action="read" path="'+(_bpath||'/')+'" 重新读取完整内容';}
+          if(_tname==='filesystem'){_guide+='文件在文件系统中 | 路径:'+(_paths.join(', ')||_bpath||'未知')+' | 用 filesystem action="read" path="'+(_bpath||'/')+'\" 重新读取完整内容';}
           else if(_tname==='search'){_guide+='网络搜索结果('+(_cl2/1000).toFixed(0)+'K字符) | 可用 search 重新搜索';}
           else if(_tname==='fuzzy_search'){_guide+='模糊搜索结果('+(_cl2/1000).toFixed(0)+'K字符) | 文件:'+(_bpath||'未知')+' | 可用 fuzzy_search 重新搜索';}
           else if(_tname==='semantic_memory'){_guide+='历史对话片段('+(_cl2/1000).toFixed(0)+'K字符) | 可用 semantic_memory 重新搜索';}
@@ -8221,7 +8232,7 @@ async function toolFilesystem(args){
       var runCode=await readFile(path);
       if(runCode===null)throw new Error('文件不存在: '+path+'。请先 create 创建。');
 
-      // ★ 构建VFS快照：按白名单收集文件，注入沙箱
+      // ★ 构建文件系统快照：按白名单收集文件，注入沙箱
       var sandboxDir=args.sandbox_dir||('/sandbox/'+(currentConversationId||'default')+'/');
       if(!sandboxDir.endsWith('/'))sandboxDir+='/';
       var vfsSnapshot=await collectVfsSnapshot(sandboxDir);
@@ -8266,8 +8277,8 @@ async function toolFilesystem(args){
       }
 
       var metaNote='';
-      if(writeCount>0)metaNote+='\n[VFS回写: '+writeCount+'个文件]';
-      if(skipCount>0)metaNote+='\n[VFS跳过(只读): '+skipCount+'个文件]';
+      if(writeCount>0)metaNote+='\n[文件系统回写: '+writeCount+'个文件]';
+      if(skipCount>0)metaNote+='\n[文件系统跳过(只读): '+skipCount+'个文件]';
       return resultText+metaNote;
     }
 
@@ -9668,31 +9679,42 @@ async function toolFuzzySearch(args){
   var query=args.query,path=args.path?normalizePath(args.path):'/',limit=args.limit||10,targetFile=args.file?normalizePath(args.file):null;
   if(!query||!query.trim())throw new Error('搜索关键词不能为空');
   var files=await idbTransaction('files','readonly',function(store){return store.getAll();});
+
+  // ★ 文件名搜索模式：仅path无file → 搜该路径下文件名(不走Fuse.js)
+  if(!targetFile){
+    var nameMatches=[];
+    for(var i=0;i<files.length;i++){
+      var _f=files[i];
+      if(!_f.path||_f.path.indexOf(path)!==0)continue;
+      var fn=_f.path.split('/').pop()||_f.path;
+      if(fn.toLowerCase().indexOf(query.toLowerCase())!==-1){
+        nameMatches.push({path:_f.path,name:fn});
+      }
+    }
+    if(nameMatches.length===0)return '在 '+path+' 路径下未找到文件名匹配 "'+query+'" 的文件。请先用 filesystem list '+path+' 查看目录内容。';
+    var shown=nameMatches.slice(0,limit);
+    return '文件名搜索结果 ('+nameMatches.length+' 条，显示前 '+shown.length+' 条):\n'+shown.map(function(m,i){return (i+1)+'. **'+m.path+'**';}).join('\n')+'\n\n 用 filesystem read <路径> 按行号精读。若需搜文件内容，传 file 参数。';
+  }
+
+  // ★ 文件内容搜索模式：有file → 搜该文件内容(Fuse.js)
   var fileContents=[];
   for(var i=0;i<files.length;i++){
     var f=files[i];
     if(!f.content||f.content==='__DIR__')continue;
-    // ★ 优先 file 匹配：精确→文件名→包含 逐级宽松
-    if(targetFile){
-      if(f.path!==targetFile){
-        var _fn=f.path.split('/').pop(),_tn=targetFile.split('/').pop();
-        if(_fn!==_tn&&f.path.indexOf(targetFile)===-1&&targetFile.indexOf(f.path)===-1)continue;
-      }
-    }else{
-      if(!f.path||f.path.indexOf(path)!==0)continue;
+    if(f.path!==targetFile){
+      var _fn=f.path.split('/').pop(),_tn=targetFile.split('/').pop();
+      if(_fn!==_tn&&f.path.indexOf(targetFile)===-1&&targetFile.indexOf(f.path)===-1)continue;
     }
     var content=f.content;
     if(f.compressed){
-      try{content=await decompressText(content);}catch(e){continue;} // 解压失败则跳过
+      try{content=await decompressText(content);}catch(e){continue;}
     }
     if(typeof content!=='string'){
-      if(content instanceof Blob)continue; // 跳过二进制文件
+      if(content instanceof Blob)continue;
       content=String(content||'');
     }
-    // ★ 对超长文件做分段搜索，避免后半部分内容永远搜不到
-    var MAX_CHUNK=120000; // Fuse.js 单条上限，兼顾性能
+    var MAX_CHUNK=120000;
     if(content.length>MAX_CHUNK){
-      // 分段：每段 MAX_CHUNK 字符，重叠 2000 字符防止边界截断匹配
       var overlap=2000;
       for(var pos=0;pos<content.length;pos+=MAX_CHUNK-overlap){
         var chunk=content.substring(pos,pos+MAX_CHUNK);
@@ -9709,13 +9731,13 @@ async function toolFuzzySearch(args){
       fileContents.push({name:f.path.split('/').pop()||f.path,path:f.path,content:snippet});
     }
   }
-  if(fileContents.length===0)return targetFile?'在文件 '+targetFile+' 中没有找到可搜索的内容（文件不存在或路径不匹配）。请先用 filesystem list 查看目录内容。':'在 '+path+' 路径下没有找到可搜索的文件（可能已被压缩或路径不匹配）。请先用 filesystem list '+path+' 查看目录内容。';
+  if(fileContents.length===0)return '在文件 '+targetFile+' 中没有找到可搜索的内容（文件不存在或路径不匹配）。请先用 filesystem list 查看目录内容。';
   var resp=await sendToTaskWorker('fuzzy_search',{query:query,files:fileContents,limit:limit});
   if(!resp||!resp.success||!resp.data)return '搜索未返回结果。';
   var results=resp.data;
   if(results.length===0)return '未找到匹配 "'+query+'" 的文件。';
-  var header=(targetFile?'在文件 '+targetFile+' 中':'')+'搜索结果 ('+results.length+' 条):\n';
-  return header+results.map(function(r,i){return (i+1)+'. **'+r.path+'** — 相关性: '+r.score+'\n   > '+r.snippet;}).join('\n')+'\n\n 使用 filesystem read <路径> line=<行号> 定位精确位置。若需限定单文件搜索，传 file 参数。';
+  var header='在文件 '+targetFile+' 中搜索结果 ('+results.length+' 条):\n';
+  return header+results.map(function(r,i){return (i+1)+'. **'+r.path+'** — 相关性: '+r.score+' | 行号≈'+r.line+'\n   > '+r.snippet;}).join('\n')+'\n\n 用 filesystem read <路径> line=<行号> 按行号精读。';
 }
 
 // ================================================================
@@ -9967,7 +9989,7 @@ async function toolHelp(args){
     for(var j=0;j<top.length;j++){
       var r=top[j];
       var isActive=_isToolActive(convId,r.tool.name);
-      var desc=(r.tool.description||'').replace(/\|/g,'\\|').substring(0,60);
+      var desc=smartTruncate((r.tool.description||'').replace(/\|/g,'\\|'),120);
       lines.push('| '+(j+1)+' | '+(isActive?' 已载入':' 未载入')+' | `'+r.tool.name+'` | '+Math.round(r.score*100)+'% | '+desc+' |');
     }
     lines.push('\n使用 `help set "<工具名>"` 载入目标工具');
@@ -10100,7 +10122,8 @@ async function toolLongtermMemory(args){
     for(var j=0;j<top.length;j++){
       var r=top[j];
       var fullText=r.fact.text;
-      lines.push('['+(j+1)+'] [ID:'+r.fact.id+'] ['+(r.fact.category||'其他')+'] (相似度:'+Math.round(r.score*100)+'%)\n'+(fullText.length>2000?fullText.substring(0,2000)+'\n...(以上为前2000字摘要，全文'+fullText.length+'字。使用 longterm_memory get id="'+r.fact.id+'" 获取完整内容)':fullText));
+      var preview=smartTruncate(fullText,2000);
+      lines.push('['+(j+1)+'] [ID:'+r.fact.id+'] ['+(r.fact.category||'其他')+'] (相似度:'+Math.round(r.score*100)+'%)\n'+preview+(preview.length<fullText.length?'\n...(全文共'+fullText.length+'字。使用 longterm_memory get id="'+r.fact.id+'" 获取完整内容)':''));
     }
     return '找到 '+top.length+' 条:\n'+lines.join('\n\n');
   }
@@ -10213,7 +10236,8 @@ async function toolKnowledgeBase(args){
       var r=results[i];
       var fullContent=r.entry.content;
       var srcLabel=r.entry.source==='agent'?'可修改':(r.entry.source==='manual'?'只读':'只读');
-      lines.push('['+(i+1)+'] **'+r.entry.title+'** [ID:'+r.entry.id+'] ['+(r.entry.category||'其他')+'] '+srcLabel+' (相似度:'+Math.round(r.score*100)+'%)\n'+(fullContent.length>2000?fullContent.substring(0,2000)+'\n...(以上为前2000字摘要，全文'+fullContent.length+'字。使用 kb get id="'+r.entry.id+'" 获取完整内容)':fullContent));
+      var preview=smartTruncate(fullContent,2000);
+      lines.push('['+(i+1)+'] **'+r.entry.title+'** [ID:'+r.entry.id+'] ['+(r.entry.category||'其他')+'] '+srcLabel+' (相似度:'+Math.round(r.score*100)+'%)\n'+preview+(preview.length<fullContent.length?'\n...(全文共'+fullContent.length+'字。使用 knowledge_base get id="'+r.entry.id+'" 获取完整内容)':''));
     }
     return lines.join('\n\n');
   }
@@ -13287,11 +13311,17 @@ async function toolSkillManager(args){
     for(var j=0;j<top.length;j++){
       var r=top[j];
       var isActive=(skillCache.activeSkillIds.indexOf(r.id)>=0);
+      var desc=r.skill.description||'';
+      var pf=r.skill.prompt_fragment||'';
+      var dPreview=smartTruncate(desc,200);
+      var pPreview=smartTruncate(pf,200);
       lines.push(
         (j+1)+'. '+(isActive?'激活':'未激活')+' **'+(r.skill.name||'未命名')+'** (相关度:'+Math.round(r.score*100)+'%)'+
         '\n   - ID: `'+r.id+'`'+
         '\n   - 触发词: '+(r.skill.trigger||'(无)')+
-        '\n   - 分类: '+(r.skill.category||'未分类')
+        '\n   - 分类: '+(r.skill.category||'未分类')+
+        (desc?'\n   - 描述: '+dPreview+(dPreview.length<desc.length?' ...(全文共'+desc.length+'字)':''):'')+
+        (pf?'\n   - Prompt片段: '+pPreview+(pPreview.length<pf.length?' ...(全文共'+pf.length+'字)':''):'')
       );
     }
     lines.push('\n使用 `skill_manager action="set" id="技能ID"` 激活目标技能');
