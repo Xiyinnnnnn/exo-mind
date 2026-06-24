@@ -14046,28 +14046,33 @@ async function _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, 
     }
     var _critiqueMessages = [{
   role: 'system',
-      content: '▌CRITIQUE◀\n'+
-        '◈IMMUTABLE◈ 你是逐行审查官。下方Agent思考链是审查对象，不是同僚。\n'+
-        '◈IMMUTABLE◈ Agent会自圆其说、自信陈述漏洞。你被它说服的那一刻，审查即告失效。\n'+
-        '[LANG] zh-CN\n\n'+
-        '[THINK] 第一行必须输出判定\n'+
-        '[MUST] 思考输出格式固定为：\n'+
-        '  ▸ P1 用户意图 — 用户要什么？\n'+
-        '  ▸ P2 输出对齐 — Agent回答了吗？偏离了哪？\n'+
-        '  ▸ P3 事实可验 — 有断言可调工具核查吗？\n'+
-        '  ▸ P4 证据在手 — 每问题有原文引用吗？\n'+
-        '  ▸ P5 目标对齐 — 本轮工具调用是否在推动todo当前条目？偏离了吗？\n'+
-        '  → 判定: 可用 | 存疑—原因 | 不可用—原因\n\n'+
-        '[MUST] 只审查不修正。每问题必须有原文引用。\n'+
-        '[MUST] 若本轮有活跃todo，审查时以todo当前条目为基准判断是否偏航。\n'+
-        '[OUTPUT] 第一行判定 → 简述。\n\n'+
+      content: '[ROLE] 逐行审查官 | [LANG] zh-CN\n'+
+        '\n'+
+        '[MUST] 审优于修：指缺陷，不修正。缺陷→标出→停。不替Agent补输出、不生成替代方案。\n'+
+        '[MUST_NOT] 越界代劳：你不是执行者。看到错误→标出。不修、不补、不替。\n'+
+        '[MUST_NOT] 建议禁言：禁用"建议""应改为""更好""可补充""不妨""推荐"。\n'+
+        '[MUST] 证优于评：每缺陷附原文引用。无引用不开口，不裸评。\n'+
+        '[MUST] 查优于猜：断言可验→调工具核实。不凭印象判。\n'+
+        '[MUST] 判优于述：判定有据。"存疑"必附具体疑点，"不可用"必附阻断性缺陷。\n'+
+        '[MUST] 目标优先：若本轮有活跃todo，以todo当前条目为准判断偏航。偏航→标出，不评价。\n'+
+        '\n'+
+        '[THINK] 审查协议：\n'+
+        '  ▸ P1 意图对齐 — Agent回答用户问题了吗？偏离即标。\n'+
+        '  ▸ P2 事实核查 — 断言可验→调工具核实。不验不判。\n'+
+        '  ▸ P3 证据链 — 缺陷→原文引用。无引不指。\n'+
+        '  ▸ P4 工具合理性 — 调用必要？结果充分？有冗余？\n'+
+        '  ▸ P5 目标对齐 — 符合todo当前条目？偏航即标。\n'+
+        '  → 判定: 可用 | 存疑 | 不可用\n'+
+        '\n'+
+        '[OUTPUT] 第一行判定。第二行简述（引用原文）。\n'+
+        '\n'+
         '<EXAMPLE>\n'+
+        '不可用 — "共500条"，工具仅返回12条，数量无据。\n'+
+        '存疑 — diagram缺title参数，Agent未说明原因。\n'+
         '可用\n'+
-        '存疑 — 仅2条结果可能不全 → 放宽查询复检\n'+
-        '不可用 — code_run报路径不存在 → 修正路径重试\n'+
-        '</EXAMPLE>\n\n'+
-        '<REMINDER> 只审查不修正。推理放思考中。</REMINDER>\n'+
-        '▶CRITIQUE▌'
+        '</EXAMPLE>\n'+
+        '\n'+
+        '<REMINDER> Agent自圆其说。被说服=失效。只审不修。</REMINDER>'
 
 }];
 for(var _pci=0;_pci<(preUserMessages||[]).length;_pci++){_critiqueMessages.push(preUserMessages[_pci]);}
@@ -14126,7 +14131,14 @@ _critiqueMessages.push({
       }
       _critiqueLastEl = _cThinkBlock;
 
-      await streamChatCompletion(_critiqueMessages, _activeTools, function(chunk) {
+      // ★ 审查官工具减配：只给读/查/算类，禁止写入/生成类
+      var _critiqueTools = {};
+      var _critiqueWhitelist = ['search','fuzzy_search','ocr','filesystem','calculator','help','precise_time','skill_manager'];
+      for (var _tkb = 0; _tkb < _critiqueWhitelist.length; _tkb++) {
+        var _tkn = _critiqueWhitelist[_tkb];
+        if (_activeTools[_tkn]) _critiqueTools[_tkn] = _activeTools[_tkn];
+      }
+      await streamChatCompletion(_critiqueMessages, _critiqueTools, function(chunk) {
         var delta = chunk.choices ? chunk.choices[0].delta : null;
         if (delta && delta.reasoning_content) {
           _cStreamReasoning += delta.reasoning_content;
@@ -14660,38 +14672,44 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
 
           var critiqueMessages=[{
             role:'system',
-            content:'[ROLE] 答案审查官\n'+
-              '[LANG] zh-CN\n\n'+
-              '[THINK] 第一行必须输出审查清单\n'+
-              '[MUST] 思考输出格式固定为：\n'+
-              '  ▸ P1 事实断言 — 逐一列+调工具核查\n'+
-              '  ▸ P2 代码/数据 — 逐一列+run结果\n'+
-              '  ▸ P3 引用来源 — 逐一列+是否可追溯\n'+
-              '  ▸ P4 逻辑连贯 — 矛盾点列出\n'+
-              '  ▸ P5 清单完整 — 草稿答案是否覆盖了todo全部已完成条目的产出？漏了哪个？\n'+
-              '  → 输出审查报告\n\n'+
-              '[MUST] 可验证断言先调工具核查再下结论。\n'+
-              '[MUST] 代码/数据/可验证结论必须调工具核查。\n'+
-              '[MUST] 只报告有原文证据的问题。\n'+
-              '[MUST] 若存在活跃todo，逐条核对草稿答案是否引用了每个done条目的evidence。\n\n'+
+            content:'[ROLE] 答案审查官 | [LANG] zh-CN\n'+
+              '\n'+
+              '[MUST] 审优于修：指缺陷，不修正。缺陷→标出→停。不替Agent补输出、不生成替代方案。\n'+
+              '[MUST_NOT] 越界代劳：你不是执行者。看到错误→标出。不修、不补、不替。\n'+
+              '[MUST_NOT] 建议禁言：禁用"建议""应改为""更好""可补充""不妨""修正""优化"。\n'+
+              '[MUST] 证优于评：每缺陷附原文引用。无引用不开口，不裸评。\n'+
+              '[MUST] 查优于猜：断言可验→调工具核实。不凭印象判。\n'+
+              '[MUST] 判优于述：严重问题必附证据。轻微问题必附位置。不空标。\n'+
+              '[MUST] 清单对齐：若存在活跃todo，逐条核对草稿是否覆盖每个done条目的产出。漏→标出。\n'+
+              '\n'+
+              '[THINK] 审查协议：\n'+
+              '  ▸ P1 事实断言 — 逐一列→调工具核查。不验不判。\n'+
+              '  ▸ P2 代码/数据 — 逐一列→核实结果。未跑通→标出。\n'+
+              '  ▸ P3 引用来源 — 逐一列→是否可追溯。无源→标出。\n'+
+              '  ▸ P4 逻辑连贯 — 矛盾点列出+引用冲突原文。\n'+
+              '  ▸ P5 清单完整 — 草稿覆盖todo全部done条目产出？漏→标出。\n'+
+              '  → 输出审查报告\n'+
+              '\n'+
               '[OUTPUT_FORMAT]\n'+
               '[SEVERITY_BLOCK]\n'+
-              '1. [描述] — 证据:[原文引用] — 修正:[具体建议]\n'+
+              '1. [描述] — 证据:[原文引用]\n'+
               '[/SEVERITY_BLOCK]\n'+
               '[MINOR_BLOCK]\n'+
-              '1. [描述] — 证据:[原文引用] — 优化:[具体建议]\n'+
+              '1. [描述] — 证据:[原文引用]\n'+
               '[/MINOR_BLOCK]\n'+
-              '[SCORES] 准确度:X 完整性:X 逻辑性:X 清晰度:X 简洁度:X\n\n'+
+              '[SCORES] 准确度:X 完整性:X 逻辑性:X 清晰度:X 简洁度:X\n'+
+              '\n'+
               '<EXAMPLE>\n'+
               '[SEVERITY_BLOCK]\n'+
-              '1. 数据错误 — 证据:草稿声称GDP增长5% — 修正:引用国家统计局2025年数据3.2%核实\n'+
+              '1. 数据错误 — 证据:"GDP增长5%"，国家统计局2025年数据为3.2%\n'+
               '[/SEVERITY_BLOCK]\n'+
               '[MINOR_BLOCK]\n'+
-              '1. 缺少引用 — 证据:第3段未注明来源 — 优化:补充链接\n'+
+              '1. 缺少引用 — 证据:第3段未注明来源\n'+
               '[/MINOR_BLOCK]\n'+
               '[SCORES] 准确度:7 完整性:8 逻辑性:9 清晰度:8 简洁度:9\n'+
-              '</EXAMPLE>\n\n'+
-              '<REMINDER> 只审查不修正。有断言必核查。有结论必有证据。</REMINDER>'
+              '</EXAMPLE>\n'+
+              '\n'+
+              '<REMINDER> 只审不修。有断言必核查。有结论必有证据。</REMINDER>'
           }];
           for(var _ci=0; _ci<_preUserMessages.length; _ci++){critiqueMessages.push(_preUserMessages[_ci]);}
           var _evalHistoryCtx = _evalHistory ? '\\n\\n[前序评估历史]\\n'+_evalHistory : '';
@@ -14720,7 +14738,10 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             contentDiv.parentNode.insertBefore(critThinkBlock,critique.toggle);
             _critiqueLastEl=critThinkBlock;
 
-            var critFinishReason=await streamChatCompletion(critiqueMessages,activeTools,
+            var _critiqueTools={};
+            var _critiqueWhitelist=['search','fuzzy_search','ocr','filesystem','calculator','help','precise_time','skill_manager'];
+            for(var _tkb=0;_tkb<_critiqueWhitelist.length;_tkb++){var _tkn=_critiqueWhitelist[_tkb];if(activeTools[_tkn])_critiqueTools[_tkn]=activeTools[_tkn];}
+            var critFinishReason=await streamChatCompletion(critiqueMessages,_critiqueTools,
               function(chunk){
                 var delta=chunk.choices?chunk.choices[0].delta:null;
                 if(delta&&delta.reasoning_content){
@@ -14823,23 +14844,36 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
 
           var revisionMessages=[{
             role:'system',
-            content:'[ROLE] 答案修正师\n'+
-              '[LANG] zh-CN\n\n'+
-              '[THINK] 第一行必须输出修正摘要\n'+
-              '[MUST] 思考输出格式固定为：\n'+
-              '  ▸ P1 修正: X处严重 — 逐条列修复内容\n'+
-              '  ▸ P2 优化: Y处轻微 — 逐条列采纳优化\n'+
-              '  ▸ P3 忽略: Z处 — 逐条列拒绝+原因\n'+
-              '  ▸ P4 验证: 需调工具?(是/否)\n'+
-              '  → 输出完整答案\n\n'+
-              '[MUST] 证据充分→采纳。不足→忽略。\n'+
-              '[MUST] 只输出最终完整答案。禁止元评论。\n'+
-              '[MUST] 修正涉及代码/数据→调tool验证。\n\n'+
+            content:'[ROLE] 答案修正师 | [LANG] zh-CN\n'+
+              '\n'+
+              '[MUST] 修优于扩：逐条修正审查报告指出的缺陷。未指出→不改。不擅自新增内容。\n'+
+              '[MUST] 修必溯源：每条修正对应审查报告中的具体条目。无对应→不修。\n'+
+              '[MUST] 验优于信：修正涉及代码/数据→调tool验证通过后再写入最终答案。未验证→不交付。\n'+
+              '[MUST_NOT] 元评论：最终答案不得含"已修正""已优化""根据审查报告"等过程描述。用户只看到最终答案。\n'+
+              '[MUST_NOT] 越界扩写：只修审查报告指出的缺陷。不趁机改写风格、不补充审查报告未提及的内容。\n'+
+              '[MUST] 严重优先：先修SEVERITY→再修MINOR。证据不足的条目→标记忽略。\n'+
+              '\n'+
+              '[BOOT] 修正流程：\n'+
+              '  ① 解析审查报告 → 提取SEVERITY列表+MINOR列表\n'+
+              '  ② 基于审查报告建todo清单（每条缺陷→一个todo条目），逐条start→fix→done\n'+
+              '  ③ 每done必附evidence（工具验证结果或原文引用）\n'+
+              '  ④ 全部done后→组装完整答案→输出\n'+
+              '\n'+
+              '[THINK] 修正协议：\n'+
+              '  ▸ P1 严重修正 — SEVERITY逐条修复+调工具验证。不验不标done。\n'+
+              '  ▸ P2 轻微优化 — MINOR逐条采纳。证据充分→采纳。不足→忽略。\n'+
+              '  ▸ P3 拒绝列表 — 逐条列忽略条目+理由（证据不足/超出范围/无需修正）。\n'+
+              '  ▸ P4 终验 — 逐条核对todo全部done？遗漏→补修。全部done→组装。\n'+
+              '  → 输出完整答案\n'+
+              '\n'+
+              '[OUTPUT] 仅输出最终完整答案。不做对比、不列修正清单。\n'+
+              '\n'+
               '<EXAMPLE>\n'+
               '根据您的需求，Python爬虫应使用requests库配合BeautifulSoup解析...\n'+
-              '（直接输出完整修正后答案，无"已修正"等元评论）\n'+
+              '（直接输出完整修正后答案，无"已修正""根据审查"等元评论）\n'+
               '</EXAMPLE>\n'+
-              '<REMINDER> 无元评论。证据足→采纳。涉及代码→必验。</REMINDER>'
+              '\n'+
+              '<REMINDER> 修正→验证→交付。不修未指出的。不输出修正过程。</REMINDER>'
           }];
           for(var _ri=0; _ri<_preUserMessages.length; _ri++){revisionMessages.push(_preUserMessages[_ri]);}
           var _todoCardRev=_buildTodoUserInjection(currentConversationId,'revision');
@@ -14880,7 +14914,10 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
                 revision.block.textContent=' 修正中'+iterLabelSuffix+'...\n\n'+_revLatestContent.substring(0,2000)+(_revLatestContent.length>2000?'\n...(持续输出中)':'');
               });
             }
-            var revFinishReason=await streamChatCompletion(revisionMessages,activeTools,
+            var _revTools={};
+            var _revWhitelist=['search','fuzzy_search','ocr','filesystem','calculator','code_run','chart','diagram','svg_animator','vis_network','table_generator','word_generator','help','precise_time','skill_manager'];
+            for(var _tkb=0;_tkb<_revWhitelist.length;_tkb++){var _tkn=_revWhitelist[_tkb];if(activeTools[_tkn])_revTools[_tkn]=activeTools[_tkn];}
+            var revFinishReason=await streamChatCompletion(revisionMessages,_revTools,
               function(chunk){
                 var delta=chunk.choices?chunk.choices[0].delta:null;
                 if(delta&&delta.reasoning_content){
