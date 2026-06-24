@@ -14000,7 +14000,202 @@ return filtered.slice(0,limit).map(function(s){return {text:s.episode.text,simil
 // 第30部分：【修复】核心对话处理 — isProcessing状态一致性
 // ================================================================
 
-// ===== In-Line 逐行审查（工具全部执行完毕后，思考链+全部工具结果一次性审查） =====
+// ★ 高危工具执行前审查：LLM判定"可用"后才放行执行
+async function _preExecutionCritique(pendingToolCalls, agentMsgDiv, streamReasoning, streamContent, userText, preUserMessages){
+  if(!pendingToolCalls||pendingToolCalls.length===0)return {blocked:false,note:''};
+  var _activeTools=getActiveTools();
+  var _critiqueTools=[];
+  var _whitelist=['search','fuzzy_search','ocr','filesystem','calculator','help','precise_time','skill_manager'];
+  for(var _tkb=0;_tkb<_activeTools.length;_tkb++){
+    var _t=_activeTools[_tkb];
+    if(_whitelist.indexOf(_t.name)>=0) _critiqueTools.push(_t);
+  }
+  // ★ pass 工具：结束审查的唯一切换。通过→空参数。打回→reason参数
+  var _passResult={blocked:false,note:''};
+  _critiqueTools.push({
+    name:'pass',
+    description:'结束审查。通过=pass()空参数。打回=pass({reason:"具体原因"})。必须调用此工具。',
+    parameters:{type:'object',properties:{reason:{type:'string',description:'打回原因。通过则不填'}},required:[]},
+    execute:async function(args){
+      var _a={};
+      try{_a=JSON.parse(args||'{}');}catch(e){}
+      var _r=(_a.reason||'').trim();
+      _passResult.blocked=_r.length>0;_passResult.note=_r;
+      return JSON.stringify({status:_r.length>0?'blocked':'passed'});
+    }
+  });
+  var _critiqueMessages=[{
+    role:'system',
+    content:'[ROLE] 逐行审查官 | [LANG] zh-CN\n'+
+      '\n'+
+      '[BOOT] 审查启动：读材料→逐份审查→判断→调pass工具。pass是唯一输出。\\n'+
+      '  ① 接收 [用户消息][Agent思维链][Agent产出文本][计划工具调用] 四份材料\\n'+
+      '  ② 逐份审查：意图对齐？思维链跳步？产出与意图一致？工具选型？参数完备？\\n'+
+      '  ③ 判定：全过→pass() | 问题→pass({reason:"[定位]具体原因"})\\n'+
+      '  ④ 必须调pass结束审查。不输出文本。\\n'+
+      '\n'+
+      '[MUST] 查优于判：可核实断言→先调工具查→再pass。不凭印象。\\n'+
+      '[MUST] 只判不修：通过→pass()。打回→pass({reason:"[定位]原因"})。不替Agent修正。\\n'+
+      '[MUST_NOT] 文本禁言：唯一输出是pass工具调用。不输出审查报告、不输出分析。\\n'+
+      '[MUST] 指错定位：打回reason精确指明思维链/工具/参数哪个环节+具体问题。\\n'+
+      '[MUST] 工具合理：该查却算→打回。该拆却扛→打回。\\n'+
+      '[MUST] 参数完备：必填缺失→打回。参数与用户意图矛盾→打回。\\n'+
+      '\n'+
+      '[THINK] 审查清单（内部推理，禁止出现在pass参数外）\\n'+
+      '  ▸ P1 核对用户消息 — Agent工具调用方向是否回应用户问题核心？\\n'+
+      '    □ 偏航否？□ 遗漏否？□ 多余否？\\n'+
+      '  ▸ P2 核对思维链 — 是否遵循查优于算/算优于估/拆优于扛？\\n'+
+      '    □ 跳步否（跳过search直接code_run）？□ 幻觉否（凭印象断言）？\\n'+
+      '  ▸ P3 核对产出文本 — 产出与用户意图一致？是否\"未完成即交付\"？\\n'+
+      '    □ 文不对题？□ 草稿当作终版？□ 缺必要产出物？\\n'+
+      '  ▸ P4 核对工具调用 — 逐一过每个计划调用的工具：选型+参数+顺序\\n'+
+      '    □ 工具选型正确？□ 参数与意图对齐？□ 必填项完备？□ 调用顺序合理？\\n'+
+      '  ▸ P5 判定 — P1-P4全过→pass() | 任一不通过→pass({reason:\"[Px] 具体原因\"})\\n'+
+      '[MUST_NOT] P1-P5思考步骤不得出现在pass参数外，不得脱离工具调用裸奔。\\n'+
+      '\n'+
+      '[OUTPUT] pass() 或 pass({reason:\"[定位]原因\"})\\n'+
+      '\n'+
+      '<EXAMPLE>\\n'+
+      '审查材料: 用户问\"写一个Python爬虫\" | Agent思维链: \"先search爬虫最佳实践→确认robots.txt→code_run写代码→filesystem存文件\" | 计划工具调用: search(query=\"Python爬虫最佳实践2026\"), code_run(写requests+bs4), filesystem(create /d/spider.py)\\n'+
+      '\\n'+
+      '▸ P1 用户消息 — 意图=写爬虫→工具方向正确，无偏航\\n'+
+      '□ 偏航否？否 | □ 遗漏否？否 | □ 多余否？否\\n'+
+      '▸ P2 思维链 — \"先search→确认→code_run→filesystem\"，查优于算，无跳步\\n'+
+      '□ 跳步否？否 | □ 幻觉否？否\\n'+
+      '▸ P3 产出文本 — 本轮仅工具调用，无产出文本\\n'+
+      '□ 文不对题？不适用 | □ 草稿当终版？不适用\\n'+
+      '▸ P4 工具调用 — search参数正确，code_run将产出代码，filesystem路径合理\\n'+
+      '□ 选型正确？是 | □ 参数对齐？是 | □ 必填完备？是 | □ 顺序合理？是\\n'+
+      '▸ P5 → pass()\\n'+
+      '\\n'+
+      '审查材料: 用户问\"分析GDP趋势\" | Agent思维链: \"直接code_run用matplotlib画图\" | 计划工具调用: code_run(code=\"import matplotlib...\")\\n'+
+      '\\n'+
+      '▸ P2 思维链 — \"直接code_run\"，跳过search查GDP数据源，查优于算违规\\n'+
+      '□ 跳步否？是 | 跳步点=应search GDP数据→再code_run分析\\n'+
+      '▸ P5 → pass({reason:\"[P2 思维链跳步]应search核实GDP数据后code_run分析，当前缺search直接code_run，编造风险\"})\\n'+
+      '</EXAMPLE>\\n'+
+      '\n'+
+      '<REMINDER>pass是唯一输出方式。不输出文本。不分析。打回reason精确到Px定位。审查要快不犹豫。</REMINDER>'
+  }];
+  for(var _pci=1;_pci<(preUserMessages||[]).length;_pci++){_critiqueMessages.push(preUserMessages[_pci]);}
+  var _plannedCalls='';
+  for(var _i=0;_i<pendingToolCalls.length;_i++){
+    _plannedCalls+='[工具: '+pendingToolCalls[_i].function.name+']\\n参数: '+pendingToolCalls[_i].function.arguments+'\\n\\n';
+  }
+  var _filteredReasoning=(streamReasoning||'(无)').replace(/我们的/g,'Agent们的').replace(/我们/g,'Agent们').replace(/我的/g,'Agent的').replace(/我/g,'Agent');
+  _critiqueMessages.push({
+    role:'user',
+    content:'[审查材料]\\n\\n[用户消息]\\n'+(userText||'(无)')+'\\n\\n[Agent思维链]\\n'+_filteredReasoning+'\\n\\n[Agent产出文本]\\n'+(streamContent||'(无，本轮仅工具调用)')+'\\n\\n[计划工具调用]\\n'+_plannedCalls+'\\n\\n逐份核对上述四份材料，调pass工具结束。'
+  });
+  try{
+    var _critiqueArtifacts=[];
+    var _gateContentDiv=agentMsgDiv.querySelector('.message-content');
+    if(!_gateContentDiv)return _passResult;
+    var _gateId=Date.now();
+    // 主报告块 —— 完全镜像答案审查官的 critique=_createPhaseBlock(...)
+    var gateBlock=document.createElement('div');
+    gateBlock.className='thinking-block';
+    gateBlock.id='gate-report-'+_gateId;
+    gateBlock.textContent=' 正在启动逐行审查...';
+    gateBlock.classList.add('collapsed');
+    var gateToggle=document.createElement('div');
+    gateToggle.className='thinking-toggle';
+    gateToggle.id='gate-report-toggle-'+_gateId;
+    gateToggle.textContent='[>] 逐行审查中...';
+    gateToggle.setAttribute('data-target','gate-report-'+_gateId);
+    gateToggle.setAttribute('data-collapse-label','[v] 收起逐行审查报告');
+    gateToggle.setAttribute('data-expand-label','[>] 查看逐行审查报告');
+    _gateContentDiv.parentNode.insertBefore(gateToggle,_gateContentDiv);
+    _gateContentDiv.parentNode.insertBefore(gateBlock,_gateContentDiv);
+    // 逐轮思考块 —— 完全镜像答案审查官的 critThinkBlock
+    for(var _critRound=0;;_critRound++){
+      var _gateStreamReasoning='';
+      var _gateThinkBlock=document.createElement('div');
+      _gateThinkBlock.className='thinking-block';
+      _gateThinkBlock.id='gate-think-r'+_critRound+'-'+_gateId;
+      var _gateThinkToggle=document.createElement('div');
+      _gateThinkToggle.className='thinking-toggle';
+      _gateThinkToggle.id='gate-think-toggle-r'+_critRound+'-'+_gateId;
+      _gateThinkToggle.textContent='[v] 逐行审查思考';
+      _gateThinkToggle.setAttribute('data-target','gate-think-r'+_critRound+'-'+_gateId);
+      _gateThinkToggle.setAttribute('data-collapse-label','[v] 逐行审查思考');
+      _gateThinkToggle.setAttribute('data-expand-label','[>] 逐行审查思考');
+      _gateContentDiv.parentNode.insertBefore(_gateThinkToggle,gateToggle);
+      _gateContentDiv.parentNode.insertBefore(_gateThinkBlock,gateToggle);
+      var _streamCalls={};
+      var _finishReason=await streamChatCompletion(_critiqueMessages,_critiqueTools,function(chunk){
+        var _delta=chunk.choices?chunk.choices[0].delta:null;
+        if(_delta&&_delta.reasoning_content){
+          _gateStreamReasoning+=_delta.reasoning_content;
+          _gateThinkBlock.textContent=_gateStreamReasoning;
+        }
+        if(_delta&&_delta.tool_calls){
+          for(var _ti=0;_ti<_delta.tool_calls.length;_ti++){
+            var _tc=_delta.tool_calls[_ti];
+            var _ix=_tc.index!==undefined?_tc.index:0;
+            if(!_streamCalls[_ix])_streamCalls[_ix]={id:_tc.id||'',function:{name:'',arguments:''}};
+            if(_tc.id)_streamCalls[_ix].id=_tc.id;
+            if(_tc.function){
+              if(_tc.function.name)_streamCalls[_ix].function.name+=_tc.function.name;
+              if(_tc.function.arguments)_streamCalls[_ix].function.arguments+=_tc.function.arguments;
+            }
+          }
+        }
+      },'user');
+      _gateThinkBlock.classList.add('collapsed');
+      _gateThinkToggle.textContent='[>] 逐行审查思考';
+      var _scKeys=Object.keys(_streamCalls);
+      var _pendingCritiqueCalls=[];
+      for(var _ski=0;_ski<_scKeys.length;_ski++){
+        var _sc=_streamCalls[_scKeys[_ski]];
+        if(_sc&&_sc.function.name)_pendingCritiqueCalls.push({id:_sc.id,type:'function',function:_sc.function});
+      }
+      if(_pendingCritiqueCalls.length===0){
+        if(_finishReason==='stop'||_finishReason==='length'){
+          _passResult={blocked:true,note:'审查模型未调用pass工具'+( _finishReason==='length'?'(响应被截断)':'')};
+        }
+        break;
+      }
+      var _critAsstMsg={role:'assistant',content:null,tool_calls:_pendingCritiqueCalls};
+      _critiqueMessages.push(_critAsstMsg);
+      var _hasPass=false;
+      for(var _pi=0;_pi<_pendingCritiqueCalls.length;_pi++){
+        var _pc=_pendingCritiqueCalls[_pi];
+        if(_pc.function.name==='pass'){
+          _hasPass=true;
+          for(var _tji=0;_tji<_critiqueTools.length;_tji++){
+            if(_critiqueTools[_tji].name==='pass'&&_critiqueTools[_tji].execute){
+              await _critiqueTools[_tji].execute(_pc.function.arguments);
+              _critiqueMessages.push({role:'tool',tool_call_id:_pc.id,content:JSON.stringify({status:_passResult.blocked?'blocked':'passed'})});
+              break;
+            }
+          }
+        }else{
+          try{
+            var _crRes=await executeTool(_pc,_critiqueArtifacts);
+            var _crContent=(_crRes&&_crRes.content!==undefined)?_crRes.content:JSON.stringify(_crRes||'');
+            _critiqueMessages.push({role:'tool',tool_call_id:_pc.id,content:(typeof _crContent==='string'?_crContent:JSON.stringify(_crContent)).substring(0,8000)});
+          }catch(_crErr){
+            _critiqueMessages.push({role:'tool',tool_call_id:_pc.id,content:'工具执行异常: '+(_crErr.message||'')});
+          }
+        }
+      }
+      if(_hasPass)break;
+    }
+    // 结果写入报告块 —— 镜像答案审查官: critique.block.textContent=最终报告
+    gateBlock.classList.add('collapsed');
+    if(_passResult.blocked){
+      gateBlock.textContent=' 逐行审查: 已拦截\n\n'+(_passResult.note||'');
+      gateToggle.textContent='[>] 查看逐行审查报告 - 已拦截';
+    }else{
+      gateBlock.textContent=' 逐行审查: 已通过\n\n所有计划工具调用均已审查，无安全风险。';
+      gateToggle.textContent='[>] 查看逐行审查报告 - 已通过';
+    }
+  }catch(e){debugLogger.error('前置拦截门异常，安全阻断: '+e.message);_passResult={blocked:true,note:'审查服务异常，本次调用被安全阻断: '+(e.message||'').substring(0,200)};}
+  return _passResult;
+}
+
+// ===== _inlineCritiqueBatch（保留供未来答案审查链复用，当前前置门已替代执行审查）=====
 async function _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, artifacts, streamReasoning, streamContent, userText, preUserMessages) {
   if (!pendingToolCalls || pendingToolCalls.length === 0) return null;
 
@@ -14048,34 +14243,32 @@ async function _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, 
   role: 'system',
       content: '[ROLE] 逐行审查官 | [LANG] zh-CN\n'+
         '\n'+
-        '[MUST] 审优于修：指缺陷，不修正。缺陷→标出→停。不替Agent补输出、不生成替代方案。\n'+
-        '[MUST_NOT] 越界代劳：你不是执行者。看到错误→标出。不修、不补、不替。\n'+
-        '[MUST_NOT] 建议禁言：禁用"建议""应改为""更好""可补充""不妨""推荐"。\n'+
-        '[MUST] 证优于评：每缺陷附原文引用。无引用不开口，不裸评。\n'+
+        '[MUST] 审优于修：只判不修。通过→调pass()。打回→调pass({reason:"原因"})。__必调pass__。\n'+
+        '[MUST_NOT] 越界代劳：你不是执行者。不要输出文本结论。必须通过pass工具调用结束。\n'+
+        '[MUST_NOT] 建议禁言：禁用"建议""应改为""更好""可补充""不妨""推荐""可用""不可用""存疑"。\n'+
+        '[MUST] 意图优先：Agent的工具调用+输出是否回答了用户问题？偏航→打回。\n'+
+        '[MUST] 证优于评：每缺陷附原文引用。无引用不开口。\n'+
         '[MUST] 查优于猜：断言可验→调工具核实。不凭印象判。\n'+
-        '[MUST] 判优于述：判定有据。"存疑"必附具体疑点，"不可用"必附阻断性缺陷。\n'+
-        '[MUST] 目标优先：若本轮有活跃todo，以todo当前条目为准判断偏航。偏航→标出，不评价。\n'+
+        '[MUST] 目标优先：若本轮有活跃todo，以todo当前条目为准判断偏航。偏航→打回。\n'+
         '\n'+
         '[THINK] 审查协议：\n'+
-        '  ▸ P1 意图对齐 — Agent回答用户问题了吗？偏离即标。\n'+
+        '  ▸ P1 意图对齐 — Agent回答用户问题了吗？偏航→打回。\n'+
         '  ▸ P2 事实核查 — 断言可验→调工具核实。不验不判。\n'+
         '  ▸ P3 证据链 — 缺陷→原文引用。无引不指。\n'+
         '  ▸ P4 工具合理性 — 调用必要？结果充分？有冗余？\n'+
-        '  ▸ P5 目标对齐 — 符合todo当前条目？偏航即标。\n'+
-        '  → 判定: 可用 | 存疑 | 不可用\n'+
-        '\n'+
-        '[OUTPUT] 第一行判定。第二行简述（引用原文）。\n'+
+        '  ▸ P5 目标对齐 — 符合todo当前条目？偏航→打回。\n'+
+        '  → 调pass()通过 或 pass({reason:"具体原因"})打回\n'+
         '\n'+
         '<EXAMPLE>\n'+
-        '不可用 — "共500条"，工具仅返回12条，数量无据。\n'+
-        '存疑 — diagram缺title参数，Agent未说明原因。\n'+
-        '可用\n'+
+        'Agent声称"共500条"但工具仅返回12条→pass({reason:"数量无据:声称500条/仅12条"})\n'+
+        'diagram缺title参数，Agent未说明→pass({reason:"diagram缺title参数"})\n'+
+        '全部合理→pass()\n'+
         '</EXAMPLE>\n'+
         '\n'+
-        '<REMINDER> Agent自圆其说。被说服=失效。只审不修。</REMINDER>'
+        '<REMINDER> 必须调用pass工具结束。通过=pass()。打回=pass({reason:"原因"})。不输出文本。</REMINDER>'
 
 }];
-for(var _pci=0;_pci<(preUserMessages||[]).length;_pci++){_critiqueMessages.push(preUserMessages[_pci]);}
+for(var _pci=1;_pci<(preUserMessages||[]).length;_pci++){_critiqueMessages.push(preUserMessages[_pci]);}
 var _filteredReasoning=(function(raw){
   var s=(raw||'(无)');
   // 1. 代词剥离
@@ -14469,6 +14662,65 @@ async function processUserMessage(userText,taskId){
       if(streamReasoning)assistantMsg.reasoning_content=streamReasoning;
       messages.push(assistantMsg);
 
+      // ★ 前置拦截门：中危内部扫(零API) → 高危LLM审查(pass工具) → 通过才执行
+      if((settings.honesty_intensity||0)>=2){
+        var __trivialTools={help:1,calculator:1,skill_manager:1,precise_time:1,browser_notify:1,speech_tts:1,speech_stt:1,archive:1,convert_format:1,geo_ip:1,mcp_connect:1,send_email:1,knowledge_base:1,longterm_memory:1};
+        var __allTrivial=pendingToolCalls.length>0&&pendingToolCalls.every(function(tc){return __trivialTools[tc.function.name];});
+        if(!__allTrivial){
+          var __highRisk={search:1,fuzzy_search:1,filesystem:1,code_run:1,custom_api_call:1,mcts_plan:1,pipeline:1,world_validator:1,flow_mode:1};
+          var __hasHighRisk=pendingToolCalls.some(function(tc){return __highRisk[tc.function.name];});
+          if(__hasHighRisk){
+            var __gate=await _preExecutionCritique(pendingToolCalls,agentMsgDiv,streamReasoning,streamContent,userText,_preUserMessages);
+            if(__gate.blocked){
+              messages[messages.length-1]={role:'assistant',content:(streamContent||'')+'\\n\\n[已拦截]'};
+              var __blockedNames=pendingToolCalls.map(function(tc){return tc.function.name;}).join(', ');
+              messages.push({role:'user',content:'---gate:blocked---\\n[受影响] '+__blockedNames+'\\n[判定] '+__gate.note+'\\n[操作] 根据[判定]中的定位修正对应工具调用，重新提交。',_injected:true});
+              continue;
+            }
+          }else{
+            // 中危：仅参数完备/结果空洞检查（零API）。不扫描错误字符串。
+            var _midGateId=Date.now();
+            var _midBlock=document.createElement('div');
+            _midBlock.className='thinking-block';
+            _midBlock.id='mid-gate-'+_midGateId;
+            _midBlock.textContent=' 参数检查: '+toolNames+'\\n';
+            _midBlock.classList.add('collapsed');
+            var _midToggle=document.createElement('div');
+            _midToggle.className='thinking-toggle';
+            _midToggle.id='mid-gate-toggle-'+_midGateId;
+            _midToggle.textContent='[>] 中危参数检查';
+            _midToggle.setAttribute('data-target','mid-gate-'+_midGateId);
+            _midToggle.setAttribute('data-collapse-label','[v] 中危参数检查');
+            _midToggle.setAttribute('data-expand-label','[>] 中危参数检查');
+            var _msgContentDiv=agentMsgDiv.querySelector('.message-content');
+            if(_msgContentDiv){_msgContentDiv.parentNode.insertBefore(_midToggle,_msgContentDiv);_msgContentDiv.parentNode.insertBefore(_midBlock,_msgContentDiv);}
+            var __issues=[];
+            for(var _k=0;_k<pendingToolCalls.length;_k++){
+              var _tc=pendingToolCalls[_k];var _a={};
+              try{_a=JSON.parse(_tc.function.arguments||'{}');}catch(e){}
+              if(_tc.function.name==='chart'&&!_a.type){__issues.push('chart: 缺少type参数');}
+              if(_tc.function.name==='diagram'&&!_a.code&&!_a.diagram_type){__issues.push('diagram: 缺少code/diagram_type参数');}
+              if(_tc.function.name==='table_generator'&&(!_a.headers||!_a.rows)){__issues.push('table_generator: 缺少headers/rows参数');}
+              if(_tc.function.name==='word_generator'&&!_a.content){__issues.push('word_generator: 缺少content参数');}
+              if(_tc.function.name==='vis_network'&&(!_a.nodes||!_a.edges)){__issues.push('vis_network: 缺少nodes/edges参数');}
+              if(_tc.function.name==='svg_animator'&&!_a.svg_code){__issues.push('svg_animator: 缺少svg_code参数');}
+              if(_tc.function.name==='pdf_generate'&&!_a.content){__issues.push('pdf_generate: 缺少content参数');}
+              if(_tc.function.name==='sql_db'&&!_a.sql&&_a.action!=='schema'&&_a.action!=='export'){__issues.push('sql_db: 缺少sql参数');}
+              if(_tc.function.name==='reqalign'&&!_a.project_id){__issues.push('reqalign: 缺少project_id参数');}
+              if(_tc.function.name==='generatespec'&&!_a.project_id){__issues.push('generatespec: 缺少project_id参数');}
+            }
+            if(__issues.length>0){
+              _midBlock.textContent=' 中危参数检查: 阻断\\n\\n参数异常:\\n'+__issues.join('\\n');
+              _midToggle.textContent='[>] 中危参数检查 - 阻断';
+              messages[messages.length-1]={role:'assistant',content:(streamContent||'')};
+              messages.push({role:'user',content:'---gate:blocked---\\n[受影响] '+toolNames+'\\n[判定] 参数异常: '+__issues.join(' | ')+'\\n[操作] 补充缺失参数或修正参数值，重新提交。',_injected:true});
+              continue;
+            }
+            _midBlock.textContent=' 中危参数检查: 已通过\\n\\n全部参数完备，无需LLM审查。';
+            _midToggle.textContent='[>] 中危参数检查 - 已通过';
+          }
+        }
+      }
       // 执行工具（并行）并收集结果
       var toolResults=[];
       var _execPromises=[];
@@ -14507,16 +14759,6 @@ async function processUserMessage(userText,taskId){
         messages.push(toolResults[tr]);
       }
 
-      // ★ In-Line 审查 — 工具结果入栈后，思考链+全部工具结果一起审查
-      // 跳过纯确定性/自证/双态工具（无歧义无需审查）
-      var __trivialTools={help:1,calculator:1,skill_manager:1,precise_time:1,browser_notify:1,speech_tts:1,speech_stt:1,archive:1,convert_format:1,geo_ip:1,mcp_connect:1,send_email:1};
-      var __allTrivial=pendingToolCalls.length>0&&pendingToolCalls.every(function(tc){return __trivialTools[tc.function.name];});
-      if(!__allTrivial&&(settings.honesty_intensity||0) >= 2){
-        var _ilcNote=await _inlineCritiqueBatch(pendingToolCalls, toolResults, agentMsgDiv, artifacts, streamReasoning, streamContent, userText, _preUserMessages);
-        if(_ilcNote){
-          messages.push({role:'user',content:'[审查报告] '+_ilcNote,_injected:true});
-        }
-      }
       // ★ TODO 注入 — 累计token消耗>100000或dirty标记时注入当前进度
       _updateTokenAccumulator(currentConversationId,_estimateTokens(JSON.stringify(messages)));
       var _todoCard=_buildTodoUserInjection(currentConversationId,'main');
@@ -14674,20 +14916,30 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             role:'system',
             content:'[ROLE] 答案审查官 | [LANG] zh-CN\n'+
               '\n'+
+              '[BOOT] 审查启动：读草稿→逐项核查→输出审查报告。只审不修。\n'+
+              '  ① 接收 [用户问题][草稿答案][工具调用记录][活跃todo] 材料\n'+
+              '  ② 逐项核查：事实断言？代码真实？来源可溯？逻辑连贯？清单对齐？\n'+
+              '  ③ 输出审查报告 → 结束。不替Agent修正。\n'+
+              '\n'+
               '[MUST] 审优于修：指缺陷，不修正。缺陷→标出→停。不替Agent补输出、不生成替代方案。\n'+
               '[MUST_NOT] 越界代劳：你不是执行者。看到错误→标出。不修、不补、不替。\n'+
-              '[MUST_NOT] 建议禁言：禁用"建议""应改为""更好""可补充""不妨""修正""优化"。\n'+
+              '[MUST_NOT] 建议禁言：禁用\"建议\"\"应改为\"\"更好\"\"可补充\"\"不妨\"\"修正\"\"优化\"。\n'+
               '[MUST] 证优于评：每缺陷附原文引用。无引用不开口，不裸评。\n'+
               '[MUST] 查优于猜：断言可验→调工具核实。不凭印象判。\n'+
               '[MUST] 判优于述：严重问题必附证据。轻微问题必附位置。不空标。\n'+
               '[MUST] 清单对齐：若存在活跃todo，逐条核对草稿是否覆盖每个done条目的产出。漏→标出。\n'+
               '\n'+
-              '[THINK] 审查协议：\n'+
-              '  ▸ P1 事实断言 — 逐一列→调工具核查。不验不判。\n'+
-              '  ▸ P2 代码/数据 — 逐一列→核实结果。未跑通→标出。\n'+
-              '  ▸ P3 引用来源 — 逐一列→是否可追溯。无源→标出。\n'+
-              '  ▸ P4 逻辑连贯 — 矛盾点列出+引用冲突原文。\n'+
-              '  ▸ P5 清单完整 — 草稿覆盖todo全部done条目产出？漏→标出。\n'+
+              '[THINK] 审查清单（内部执行，禁止出现在审查报告外）\n'+
+              '  ▸ P1 事实断言 — 逐一列出所有断言→调工具逐条核查\n'+
+              '    □ 数据与权威来源一致？□ 代码运行结果与声称一致？□ 遗漏断言？\n'+
+              '  ▸ P2 代码/数据 — 逐一列出所有代码块/数据→核实是否跑通\n'+
+              '    □ 代码已跑通且exitCode:0？□ 输出与描述一致？□ 路径正确？\n'+
+              '  ▸ P3 引用来源 — 逐一列出所有引用\n'+
+              '    □ 来源可追溯？□ 链接有效？□ 来源权威？\n'+
+              '  ▸ P4 逻辑连贯 — 扫描全文\n'+
+              '    □ 前后矛盾？□ 递进合理？□ 无跳跃？\n'+
+              '  ▸ P5 清单完整 — 活跃todo存在时执行\n'+
+              '    □ 草稿覆盖每个done条目产出？□ 漏项标出？\n'+
               '  → 输出审查报告\n'+
               '\n'+
               '[OUTPUT_FORMAT]\n'+
@@ -14700,18 +14952,33 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
               '[SCORES] 准确度:X 完整性:X 逻辑性:X 清晰度:X 简洁度:X\n'+
               '\n'+
               '<EXAMPLE>\n'+
+              '审查材料: 用户问\"Python爬虫最佳实践\" | 草稿答案:\"建议使用requests库，配合BeautifulSoup解析。国家统计局2025年GDP增长5%可作为参考。\"\n'+
+              '\n'+
+              '▸ P1 事实断言 — 断言列表: ①requests库适合爬虫 ②BeautifulSoup可解析HTML ③GDP增长5%\n'+
+              '→ 调search核实: ①②为公认事实 | ③search返回国家统计局2025年数据为3.2%\n'+
+              '□ 数据与权威一致？③不一致 | □ 代码结果一致？N/A | □ 遗漏？无\n'+
+              '▸ P2 代码/数据 — 草稿无代码块\n'+
+              '□ 全部N/A\n'+
+              '▸ P3 引用来源 — 草稿无引用链接\n'+
+              '□ 来源可追溯？否，第2段\"国家统计局\"未附链接 | □ 缺引用标注\n'+
+              '▸ P4 逻辑连贯 — 全文流畅，无矛盾\n'+
+              '□ 无矛盾 | □ 递进合理\n'+
+              '▸ P5 清单完整 — 无活跃todo\n'+
+              '□ 跳过\n'+
+              '→ 输出审查报告:\n'+
+              '\n'+
               '[SEVERITY_BLOCK]\n'+
-              '1. 数据错误 — 证据:"GDP增长5%"，国家统计局2025年数据为3.2%\n'+
+              '1. 数据错误 — 证据:\"GDP增长5%\"，search核实国家统计局2025年数据为3.2%\n'+
               '[/SEVERITY_BLOCK]\n'+
               '[MINOR_BLOCK]\n'+
-              '1. 缺少引用 — 证据:第3段未注明来源\n'+
+              '1. 缺少引用来源 — 证据:第2段\"国家统计局\"未附链接\n'+
               '[/MINOR_BLOCK]\n'+
-              '[SCORES] 准确度:7 完整性:8 逻辑性:9 清晰度:8 简洁度:9\n'+
+              '[SCORES] 准确度:5 完整性:8 逻辑性:9 清晰度:8 简洁度:9\n'+
               '</EXAMPLE>\n'+
               '\n'+
-              '<REMINDER> 只审不修。有断言必核查。有结论必有证据。</REMINDER>'
+              '<REMINDER>只审不修。有断言必核查。有结论必有证据。P1-P5禁止出现在审查报告外。</REMINDER>'
           }];
-          for(var _ci=0; _ci<_preUserMessages.length; _ci++){critiqueMessages.push(_preUserMessages[_ci]);}
+          for(var _ci=1; _ci<_preUserMessages.length; _ci++){critiqueMessages.push(_preUserMessages[_ci]);}
           var _evalHistoryCtx = _evalHistory ? '\\n\\n[前序评估历史]\\n'+_evalHistory : '';
           var _todoCardPost=_buildTodoUserInjection(currentConversationId,'evaluator');
           critiqueMessages.push({
@@ -14846,36 +15113,60 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
             role:'system',
             content:'[ROLE] 答案修正师 | [LANG] zh-CN\n'+
               '\n'+
-              '[MUST] 修优于扩：逐条修正审查报告指出的缺陷。未指出→不改。不擅自新增内容。\n'+
-              '[MUST] 修必溯源：每条修正对应审查报告中的具体条目。无对应→不修。\n'+
-              '[MUST] 验优于信：修正涉及代码/数据→调tool验证通过后再写入最终答案。未验证→不交付。\n'+
-              '[MUST_NOT] 元评论：最终答案不得含"已修正""已优化""根据审查报告"等过程描述。用户只看到最终答案。\n'+
-              '[MUST_NOT] 越界扩写：只修审查报告指出的缺陷。不趁机改写风格、不补充审查报告未提及的内容。\n'+
-              '[MUST] 严重优先：先修SEVERITY→再修MINOR。证据不足的条目→标记忽略。\n'+
-              '\n'+
-              '[BOOT] 修正流程：\n'+
+              '[BOOT] 修正启动：读审查报告→建todo→逐条修+验→组装→交付。只修不扩。\n'+
               '  ① 解析审查报告 → 提取SEVERITY列表+MINOR列表\n'+
               '  ② 基于审查报告建todo清单（每条缺陷→一个todo条目），逐条start→fix→done\n'+
               '  ③ 每done必附evidence（工具验证结果或原文引用）\n'+
               '  ④ 全部done后→组装完整答案→输出\n'+
               '\n'+
-              '[THINK] 修正协议：\n'+
-              '  ▸ P1 严重修正 — SEVERITY逐条修复+调工具验证。不验不标done。\n'+
-              '  ▸ P2 轻微优化 — MINOR逐条采纳。证据充分→采纳。不足→忽略。\n'+
-              '  ▸ P3 拒绝列表 — 逐条列忽略条目+理由（证据不足/超出范围/无需修正）。\n'+
-              '  ▸ P4 终验 — 逐条核对todo全部done？遗漏→补修。全部done→组装。\n'+
+              '[MUST] 修优于扩：逐条修正审查报告指出的缺陷。未指出→不改。不擅自新增内容。\n'+
+              '[MUST] 修必溯源：每条修正对应审查报告中的具体条目。无对应→不修。\n'+
+              '[MUST] 验优于信：修正涉及代码/数据→调tool验证通过后再写入最终答案。未验证→不交付。\n'+
+              '[MUST_NOT] 元评论：最终答案不得含\"已修正\"\"已优化\"\"根据审查报告\"等过程描述。用户只看到最终答案。\n'+
+              '[MUST_NOT] 越界扩写：只修审查报告指出的缺陷。不趁机改写风格、不补充审查报告未提及的内容。\n'+
+              '[MUST] 严重优先：先修SEVERITY→再修MINOR。证据不足的条目→标记忽略。\n'+
+              '\n'+
+              '[THINK] 修正清单（内部执行，禁止出现在最终答案外）\n'+
+              '  ▸ P1 严重修正 — SEVERITY逐条修复+调工具验证\n'+
+              '    □ todo start → □ fix完成 → □ 工具验证通过 → □ done+evidence\n'+
+              '  ▸ P2 轻微优化 — MINOR逐条采纳\n'+
+              '    □ 审查报告指出？→ □ 证据充分→采纳 | □ 不足→忽略\n'+
+              '  ▸ P3 拒绝列表 — 逐条列忽略条目+理由\n'+
+              '    □ 证据不足？□ 超出范围？□ 无需修正？\n'+
+              '  ▸ P4 终验 — 逐条核对todo全部done？\n'+
+              '    □ 遗漏？→补修 | □ 全部done→组装\n'+
               '  → 输出完整答案\n'+
               '\n'+
               '[OUTPUT] 仅输出最终完整答案。不做对比、不列修正清单。\n'+
               '\n'+
               '<EXAMPLE>\n'+
-              '根据您的需求，Python爬虫应使用requests库配合BeautifulSoup解析...\n'+
-              '（直接输出完整修正后答案，无"已修正""根据审查"等元评论）\n'+
+              '审查报告: SEVERITY: ①\"GDP增长5%\"应为3.2% ②缺少数据来源链接 | MINOR: ①第3段未注明引用\n'+
+              '\n'+
+              '▸ P1 严重修正:\n'+
+              '  todo create title=\"修正草稿\" items=[{\"id\":\"1\",\"desc\":\"GDP数据修正为3.2%\"},{\"id\":\"2\",\"desc\":\"补充国家统计局来源链接\"}]\n'+
+              '  → todo start 1\n'+
+              '    fix: \"GDP增长5%\"→\"GDP增长3.2%\"\n'+
+              '    verify: search(\"国家统计局2025年GDP增长率\")→确认3.2%\n'+
+              '    □ todo 1 done+evidence: search核实国家统计局2025年GDP增长率为3.2%\n'+
+              '  → todo start 2\n'+
+              '    fix: 补链接 https://www.stats.gov.cn/...\n'+
+              '    verify: 链接可访问\n'+
+              '    □ todo 2 done+evidence: 链接有效，指向国家统计局2025年公报\n'+
+              '▸ P2 轻微优化:\n'+
+              '  ①第3段未注明引用 → 采纳，补注\"来源:国家统计局\"\n'+
+              '  □ 采纳\n'+
+              '▸ P3 拒绝列表: 无\n'+
+              '▸ P4 终验:\n'+
+              '  □ todo 1 done ✓ | □ todo 2 done ✓ | □ 无遗漏\n'+
+              '  → 组装→输出:\n'+
+              '\n'+
+              '建议使用requests库配合BeautifulSoup解析HTML。国家统计局2025年数据显示GDP增长3.2%（来源:国家统计局 https://www.stats.gov.cn/...）。\n'+
               '</EXAMPLE>\n'+
               '\n'+
-              '<REMINDER> 修正→验证→交付。不修未指出的。不输出修正过程。</REMINDER>'
+              '<REMINDER>修正→验证→交付。不修未指出的。不输出修正过程。P1-P4禁止出现在最终答案外。</REMINDER>'
+
           }];
-          for(var _ri=0; _ri<_preUserMessages.length; _ri++){revisionMessages.push(_preUserMessages[_ri]);}
+          for(var _ri=1; _ri<_preUserMessages.length; _ri++){revisionMessages.push(_preUserMessages[_ri]);}
           var _todoCardRev=_buildTodoUserInjection(currentConversationId,'revision');
           revisionMessages.push({
             role:'user',
@@ -15230,6 +15521,8 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
 
     if(!window._persistentMessages)window._persistentMessages={};
     window._persistentMessages[currentConversationId]=messages.filter(function(m){
+      if(m._injected)return false; // 注入消息不入持久缓存
+      if(m._injected)return false;
       var c=typeof m.content==='string'?m.content:'';
       if(/^\[审查报告\]/.test(c))return false;
       if(/^\[TODO\s*卡片\]/.test(c))return false;
@@ -15305,7 +15598,8 @@ async function processFlowTurn(userText, cs, taskId){
   }
 }
 
-// ===== 全局辅助：审查-修正内嵌气泡链（主Agent & 心流复用）=====
+// ===== 全局辅助：审查-修正内嵌气泡链（主Agent）=====
+
 function _insertAfter(el,refEl){
   if(refEl.nextSibling)refEl.parentNode.insertBefore(el,refEl.nextSibling);
   else refEl.parentNode.appendChild(el);
@@ -15527,15 +15821,6 @@ async function streamChatCompletionForFlow(messages, activeTools, cs, messagesDi
       }
       if(_progressNote&&_progressNote.parentNode)_progressNote.remove();
 
-      // ★ 心流路径 In-Line 审查
-      var __trivialTools={help:1,calculator:1,skill_manager:1,precise_time:1,browser_notify:1,speech_tts:1,speech_stt:1,archive:1,convert_format:1,geo_ip:1,mcp_connect:1,send_email:1};
-      var __allTrivial=pendingCalls.length>0&&pendingCalls.every(function(tc){return __trivialTools[tc.function.name];});
-      if(!__allTrivial&&(settings.honesty_intensity||0) >= 2){
-        var _ilcNote=await _inlineCritiqueBatch(pendingCalls, _flowToolResults, agentMsgDiv, artifacts, streamReasoning, streamContent||'', '', null);
-        if(_ilcNote){
-          messages.push({role:'user',content:'[审查报告] '+_ilcNote,_injected:true});
-        }
-      }
 
     } // ← 闭合 for(;;)
 
@@ -18315,6 +18600,10 @@ function initEventBindings(){
     var newBid='b_'+Date.now();
     bd._branches[newBid]={items:prefixItems,parentId:pid,forkPoint:fp};
     bd._currentBranchId=newBid;
+    // ★ 清除旧分支的消息缓存，避免新分支被污染
+    if(window._persistentMessages&&window._persistentMessages[currentConversationId]){
+      delete window._persistentMessages[currentConversationId];
+    }
     if(bd._branchOrder.indexOf(newBid)<0)bd._branchOrder.push(newBid);
     var db=await getDB();
     var tx=db.transaction('messages','readwrite');
