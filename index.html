@@ -71,6 +71,11 @@ body{
   animation:messageSlideIn .3s ease-out;
   position:relative;overflow:visible;
 }
+/* ★ hover 桥接：防止鼠标从消息到操作按钮时掉落 */
+.message::after{
+  content:'';position:absolute;bottom:-2px;right:0;width:80px;height:36px;
+  pointer-events:auto;z-index:1;
+}
 @keyframes messageSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .message.user{align-self:flex-end}
 .message.agent{align-self:flex-start}
@@ -718,6 +723,10 @@ button,label,[role="button"],.file-upload-btn{
         <div class="settings-field"><label for="settingApiKey">DeepSeek API Key</label><input type="password" id="settingApiKey" placeholder="sk-..."></div>
         <div class="settings-field"><label for="settingBaseUrl">Base URL</label><input type="text" id="settingBaseUrl" value="https://api.deepseek.com"></div>
         <div class="settings-field"><label for="settingModel">模型名称</label><input type="text" id="settingModel" value="deepseek-v4-flash"></div>
+        <div style="display:flex;gap:6px;margin:-6px 0 8px">
+          <button class="btn btn-outline btn-sm" id="btnVerifyApiKey" style="flex:1;font-size:12px"> 验证Key</button>
+          <button class="btn btn-outline btn-sm" id="btnFetchModels" style="flex:1;font-size:12px"> 获取模型</button>
+        </div>
         <div class="settings-field"><label for="settingReasoningEffort">思考深度</label><select id="settingReasoningEffort"><option value="off">关闭（off）</option><option value="high">高（high）</option><option value="max" selected>最大（max）</option></select></div>
         <div class="settings-field"><label for="settingTemperature">温度</label><input type="range" id="settingTemperature" min="0" max="20" value="6" step="1" oninput="var v=parseInt(this.value)/10;var el=document.getElementById('tempValue');el.textContent=v.toFixed(1);settings.temperature=v;clearTimeout(this._saveTimer);this._saveTimer=setTimeout(function(){saveSettings();},500);"><div class="range-labels"><span>0.0</span><span id="tempValue">0.6</span><span>2.0</span></div><div class="help-text">仅思考=关闭时生效。思考开启时模型自主控制。官方: 编程0.0 / 通用1.3 / 创意1.5</div></div>
         <div class="settings-field"><label for="settingMaxTokens">最大输出 Token</label><input type="number" id="settingMaxTokens" value="384000" min="256" max="384000" step="256"></div>
@@ -17414,6 +17423,54 @@ function initEventBindings(){
   }
   var btnResetSystem=document.getElementById('btnResetSystem');
   if(btnResetSystem)btnResetSystem.addEventListener('click',resetSystem);
+
+  // ★ 接口配置：验证Key & 获取模型
+  var btnVerifyApiKey=document.getElementById('btnVerifyApiKey');
+  if(btnVerifyApiKey)btnVerifyApiKey.addEventListener('click',async function(){
+    var key=(document.getElementById('settingApiKey').value||'').trim();
+    var url=(document.getElementById('settingBaseUrl').value||'').trim();
+    if(!key){showToast('请先输入API Key','warning');return;}
+    if(!url){showToast('请先输入Base URL','warning');return;}
+    btnVerifyApiKey.disabled=true;btnVerifyApiKey.textContent='验证中...';
+    try{
+      var resp=await fetch(url.replace(/\/$/,'')+'/models',{
+        headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'}
+      });
+      if(resp.ok){showToast('API Key 有效 ✓','success');}
+      else{var t=await resp.text();showToast('失败: HTTP '+resp.status+' '+(t||'').slice(0,100),'error');}
+    }catch(e){showToast('网络错误: '+e.message,'error');}
+    btnVerifyApiKey.disabled=false;btnVerifyApiKey.textContent='验证Key';
+  });
+  var btnFetchModels=document.getElementById('btnFetchModels');
+  if(btnFetchModels)btnFetchModels.addEventListener('click',async function(){
+    var key=(document.getElementById('settingApiKey').value||'').trim();
+    var url=(document.getElementById('settingBaseUrl').value||'').trim();
+    if(!key){showToast('请先输入API Key','warning');return;}
+    if(!url){showToast('请先输入Base URL','warning');return;}
+    btnFetchModels.disabled=true;btnFetchModels.textContent='获取中...';
+    try{
+      var resp=await fetch(url.replace(/\/$/,'')+'/models',{
+        headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'}
+      });
+      if(!resp.ok){var t=await resp.text();showToast('失败: HTTP '+resp.status+' '+(t||'').slice(0,100),'error');btnFetchModels.disabled=false;btnFetchModels.textContent='获取模型';return;}
+      var data=await resp.json();var models=(data.data||[]).filter(function(m){return m.id;});
+      if(!models.length){showToast('未获取到模型列表','warning');btnFetchModels.disabled=false;btnFetchModels.textContent='获取模型';return;}
+      var modelEl=document.getElementById('settingModel');
+      if(!modelEl){btnFetchModels.disabled=false;btnFetchModels.textContent='获取模型';return;}
+      var parent=modelEl.parentNode;
+      var sel=document.createElement('select');
+      sel.id='settingModel';
+      sel.style.cssText='width:100%;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;outline:none';
+      for(var i=0;i<models.length;i++){
+        var o=document.createElement('option');o.value=models[i].id;o.textContent=models[i].id;
+        if(models[i].id===modelEl.value)o.selected=true;
+        sel.appendChild(o);
+      }
+      parent.replaceChild(sel,modelEl);
+      showToast('已获取 '+models.length+' 个模型','success');
+    }catch(e){showToast('网络错误: '+e.message,'error');}
+    btnFetchModels.disabled=false;btnFetchModels.textContent='获取模型';
+  });
 
   // 知识库
   var btnKbAdd=document.getElementById('btnKbAdd');
