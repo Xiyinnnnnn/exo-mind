@@ -19013,6 +19013,7 @@ async function switchConversation(convId,forceSwitch){
   if(oldCid && oldCid !== convId){
     var curState=_ensureConvState(oldCid);
     // ★ 全局变量通过代理自动反映当前对话状态；切换前保持旧状态已由代理自动同步
+    curState._scrollPos=msgList.scrollTop;
     if(!curState._container){
       curState._container=document.createElement('div');
       curState._container.className='messages-list';
@@ -19043,6 +19044,7 @@ async function switchConversation(convId,forceSwitch){
     while(targetState._container.firstChild){
       msgList.appendChild(targetState._container.firstChild);
     }
+    msgList.scrollTop=targetState._scrollPos||0;
     _restoreFlowBubbles(convId);
     renderConversationList();
     updateSendButton();
@@ -19117,6 +19119,7 @@ async function switchConversation(convId,forceSwitch){
         }
       }
       _restoreRenderArtifacts(msgList);
+      msgList.scrollTop=targetState._scrollPos||msgList.scrollHeight;
       _renderBubbleBranchNavs();
       setStatus('idle');
     }catch(e){debugLogger.warn('切换会话失败: '+e.message);}
