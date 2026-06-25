@@ -18844,7 +18844,7 @@ async function loadConversationsFromDB(){
       conversationDB.entries=all;
       var _lastId=localStorage.getItem('exo_last_conv');
       var _found=_lastId&&all.find(function(e){return e.id===_lastId;});
-      currentConversationId=_found?_found.id:all[0].id;
+      currentConversationId=_found?_found.id:(_lastId||all[0].id);
     }else{
       // 无历史对话，保持欢迎界面，不创建对话
       conversationDB.entries=[];
