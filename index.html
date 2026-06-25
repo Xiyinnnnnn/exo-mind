@@ -3144,68 +3144,275 @@ for(var ti=0;ti<TEXT_EXTS.length;ti++){
   FILE_PARSERS[TEXT_EXTS[ti]]=async function(arrayBuf){return new TextDecoder().decode(arrayBuf);};
 }
 
-// PDF
-FILE_PARSERS['.pdf']=async function(arrayBuf){
+// PDF — 结构化 Markdown，全量解析，超大时分离存储
+FILE_PARSERS['.pdf']=async function(arrayBuf,filePath){
   await loadLibrary('pdfjs');
   pdfjsLib.GlobalWorkerOptions.workerSrc='';
   var pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
-  var pages=[];
-  var maxPages=Math.min(pdf.numPages,200);
-  for(var i=1;i<=maxPages;i++){
+  var FULL_STORE_THRESHOLD=500000;
+  var allPages=[];
+  for(var i=1;i<=pdf.numPages;i++){
     var page=await pdf.getPage(i);
     var text=await page.getTextContent();
-    pages.push(text.items.map(function(it){return it.str;}).join(' '));
+    var pageText=text.items.map(function(it){return it.str;}).join(' ').replace(/\s{2,}/g,' ');
+    allPages.push(pageText);
   }
-  return '[PDF '+pdf.numPages+'页, 已提取'+pages.length+'页]\n\n'+pages.map(function(p,i){return '--- 第'+(i+1)+'页 ---\n'+p;}).join('\n\n');
+  // 构建完整 Markdown
+  var fullMd='# PDF: '+pdf.numPages+'页\n\n';
+  fullMd+='| 属性 | 值 |\n|------|------|\n';
+  fullMd+='| 总页数 | '+pdf.numPages+' |\n';
+  fullMd+='| 页均字数 | ~'+Math.round(allPages.reduce(function(s,p){return s+p.length;},0)/Math.max(pdf.numPages,1))+' |\n';
+  fullMd+='\n---\n\n';
+  for(var i=0;i<allPages.length;i++){
+    if(allPages[i]&&allPages[i].trim()){
+      fullMd+='## 第'+(i+1)+'页\n\n'+allPages[i]+'\n\n';
+    }
+  }
+  if(fullMd.length<=FULL_STORE_THRESHOLD||!filePath){
+    return fullMd;
+  }
+  // 超大文档: 完整版存入 .full 文件
+  var fullPath=filePath+'.full';
+  try{await createFile(fullPath,fullMd);}catch(e){}
+  // 返回摘要
+  var summary='# PDF: '+pdf.numPages+'页 (完整版已分离存储)\n\n';
+  summary+='| 属性 | 值 |\n|------|------|\n';
+  summary+='| 总页数 | '+pdf.numPages+' |\n';
+  summary+='| 完整解析结果 | 已存储至 `'+fullPath+'`，请用 filesystem read 读取 |\n';
+  summary+='| 文件大小 | '+formatSize(fullMd.length)+' |\n';
+  summary+='\n---\n\n';
+  summary+='## 前3页预览\n\n';
+  for(var i=0;i<Math.min(3,allPages.length);i++){
+    if(allPages[i]&&allPages[i].trim()){
+      summary+='### 第'+(i+1)+'页\n\n'+allPages[i].substring(0,2000)+(allPages[i].length>2000?' ...(本页共'+allPages[i].length+'字，已截断预览)':'')+'\n\n';
+    }
+  }
+  summary+='\n> 完整解析结果已存储至: `'+fullPath+'`\n';
+  summary+='> 请使用 `filesystem read` 工具读取完整内容，支持 mode="chunked" 分段读取。\n';
+  return summary;
 };
 
-// DOCX
-FILE_PARSERS['.docx']=async function(arrayBuf){
+// DOCX — 优先 Markdown 格式保留语义结构
+FILE_PARSERS['.docx']=async function(arrayBuf,filePath){
   await loadLibrary('mammoth');
-  var result=await mammoth.extractRawText({arrayBuffer:arrayBuf});
-  return result.value||'(DOCX解析为空)';
+  var FULL_STORE_THRESHOLD=500000;
+  var mdResult=null;
+  try{mdResult=await mammoth.convertToMarkdown({arrayBuffer:arrayBuf});}catch(e){}
+  var md='';
+  if(mdResult&&mdResult.value&&mdResult.value.trim()){
+    md='# Word 文档解析结果\n\n';
+    if(mdResult.messages&&mdResult.messages.length>0){
+      md+='> 解析备注: '+mdResult.messages.slice(0,10).map(function(m){return m.message;}).join('; ')+'\n\n';
+    }
+    md+=mdResult.value;
+  }else{
+    // 降级为纯文本
+    var raw=await mammoth.extractRawText({arrayBuffer:arrayBuf});
+    md='# Word 文档解析结果 (纯文本降级)\n\n'+(raw.value||'(DOCX解析为空)');
+  }
+  if(md.length<=FULL_STORE_THRESHOLD||!filePath){
+    return md;
+  }
+  var fullPath=filePath+'.full';
+  try{await createFile(fullPath,md);}catch(e){}
+  var lines=md.split('\n');
+  var headings=[];
+  for(var i=0;i<lines.length;i++){
+    if(/^#{1,4}\s/.test(lines[i]))headings.push(lines[i]);
+    if(headings.length>=50)break;
+  }
+  var summary='# Word 文档解析结果 (完整版已分离存储)\n\n';
+  summary+='| 属性 | 值 |\n|------|------|\n';
+  summary+='| 完整解析结果 | 已存储至 `'+fullPath+'`，请用 filesystem read 读取 |\n';
+  summary+='| 文件大小 | '+formatSize(md.length)+' |\n';
+  summary+='| 总行数 | '+lines.length+' |\n';
+  if(headings.length>0){
+    summary+='\n## 文档结构 (前50个标题)\n\n';
+    for(var i=0;i<headings.length;i++){
+      summary+=headings[i]+'\n';
+    }
+  }
+  summary+='\n## 正文前3000字预览\n\n';
+  summary+=md.replace(/^#.+$/gm,'').replace(/\n{3,}/g,'\n\n').substring(0,3000);
+  summary+='\n\n> 完整解析结果已存储至: `'+fullPath+'`\n';
+  summary+='> 请使用 `filesystem read` 工具读取完整内容，支持 mode="chunked" 分段读取。\n';
+  return summary;
 };
 
-// XLSX / XLS / ODS / CSV
+// XLSX / XLS / ODS / CSV — Markdown 表格 + 每列类型推断 + 列摘要
 var SHEET_EXTS=['.xlsx','.xls','.xlsm','.ods','.csv'];
+var _sheetColumnInfer=function(samples){
+  if(!samples||samples.length===0)return '空列';
+  var counts={num:0,date:0,bool:0,text:0};
+  for(var i=0;i<samples.length;i++){
+    var s=String(samples[i]).trim();
+    if(/^(true|false|yes|no|TRUE|FALSE|YES|NO)$/.test(s))counts.bool++;
+    else if(/^\d{2,4}[-\/]\d{1,2}[-\/]\d{1,2}/.test(s))counts.date++;
+    else if(/^-?\d[\d,.]*%?$/.test(s.replace(/[¥$€£]/g,'')))counts.num++;
+    else counts.text++;
+  }
+  var max=0,maxType='文本';
+  for(var k in counts){if(counts[k]>max){max=counts[k];maxType=k;}}
+  return {num:'数字',date:'日期',bool:'布尔',text:'文本'}[maxType];
+};
 for(var si=0;si<SHEET_EXTS.length;si++){
-  FILE_PARSERS[SHEET_EXTS[si]]=async function(arrayBuf){
+  FILE_PARSERS[SHEET_EXTS[si]]=async function(arrayBuf,filePath){
     await loadLibrary('xlsx');
     var wb=XLSX.read(arrayBuf,{type:'array'});
-    var names=wb.SheetNames.slice(0,20);
-    var out='[工作簿: '+wb.SheetNames.length+'个工作表]\n';
+    var _sheetMetas=[];
+    var allNames=wb.SheetNames;
+    var names=allNames.slice(0,50);
+    var FULL_STORE_THRESHOLD=500000;
+    var fullMd='';
+    var totalLen=0;
     for(var n=0;n<names.length;n++){
       var ws=wb.Sheets[names[n]];
-      var txt=XLSX.utils.sheet_to_csv(ws,{blankrows:false,strip:true});
-      out+='\n--- '+names[n]+' ---\n'+(txt||'(空表)');
-      if(out.length>50000){out+='\n...(以上为前50000字，工作表过多，已省略后续工作表)';break;}
+      var json=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',blankrows:false});
+      if(!json||json.length===0){
+        fullMd+='\n## '+names[n]+'\n\n*(空表)*\n\n';
+        continue;
+      }
+      var totalRows=json.length;
+      var colCount=json[0]?json[0].length:0;
+      fullMd+='\n## '+names[n]+' ('+totalRows+'行 x '+colCount+'列)\n\n';
+      // 收集元数据供后续摘要使用（避免二次解析）
+      var _colSamples=[];
+      for(var c=0;c<colCount;c++){
+        var _samps=[];
+        for(var r=1;r<Math.min(totalRows,200);r++){
+          var _v=json[r]&&json[r][c];
+          if(_v!==''&&_v!==null&&_v!==undefined&&_samps.length<3)_samps.push(String(_v));
+        }
+        _colSamples.push(_samps);
+      }
+      _sheetMetas.push({name:names[n],totalRows:totalRows,colCount:colCount,headers:json[0]||[],colSamples:_colSamples});
+      // 列摘要表
+      if(totalRows>=2&&colCount>0){
+        fullMd+='### 列信息\n\n';
+        fullMd+='| 列名 | 类型 | 非空率 | 示例值 |\n';
+        fullMd+='|------|------|--------|--------|\n';
+        for(var c=0;c<colCount;c++){
+          var colName=json[0][c]!==undefined&&json[0][c]!==''?String(json[0][c]):('列'+(c+1));
+          var samples=[];
+          var nonEmpty=0;
+          for(var r=1;r<Math.min(totalRows,500);r++){
+            var val=json[r]&&json[r][c];
+            if(val!==''&&val!==null&&val!==undefined){nonEmpty++;if(samples.length<5)samples.push(String(val));}
+          }
+          var typeHint=_sheetColumnInfer(samples);
+          var ratio=totalRows>1?Math.round(nonEmpty/Math.min(totalRows-1,499)*100)+'%':'N/A';
+          var example=samples.slice(0,2).map(function(s){return'`'+(s.length>20?s.substring(0,20)+'...':s)+'`';}).join(', ')||'(空)';
+          fullMd+='| **'+colName.replace(/\|/g,'\\|')+'** | '+typeHint+' | '+ratio+' | '+example+' |\n';
+        }
+        fullMd+='\n';
+      }
+      // 数据表 (Markdown 表格)
+      fullMd+='### 数据\n\n';
+      // 确保每行列数一致
+      var padded=json.map(function(row){
+        var arr=[];for(var c=0;c<colCount;c++)arr.push(c<row.length?String(row[c]||'').replace(/\|/g,'\\|').replace(/\n/g,' '):'');return arr;
+      });
+      fullMd+='| '+padded[0].join(' | ')+' |\n';
+      fullMd+='|'+padded[0].map(function(){return'---';}).join('|')+'|\n';
+      for(var r=1;r<padded.length;r++){
+        fullMd+='| '+padded[r].join(' | ')+' |\n';
+      }
+      fullMd+='\n';
+      totalLen=fullMd.length;
+      if(totalLen>FULL_STORE_THRESHOLD*3&&n<names.length-1){
+        fullMd+='\n> 后续工作表未纳入完整解析，完整版仅包含前'+(n+1)+'个工作表。\n';
+        break;
+      }
     }
-    return out;
+    if(allNames.length>50){
+      fullMd+='\n> 工作簿共'+allNames.length+'个工作表，完整版仅展示前50个。其余工作表: '+allNames.slice(50).map(function(n){return'`'+n+'`';}).join(', ')+'\n';
+    }
+    if(fullMd.length<=FULL_STORE_THRESHOLD||!filePath){
+      return '# 表格解析结果\n\n- 工作表数量: '+allNames.length+'\n- 工作表列表: '+allNames.map(function(n){return'`'+n+'`';}).join(', ')+'\n\n'+fullMd;
+    }
+    // 超大: 完整版存入 .full
+    var fullPath=filePath+'.full';
+    try{await createFile(fullPath,'# 表格解析结果\n\n- 工作表数量: '+allNames.length+'\n- 工作表列表: '+allNames.map(function(n){return'`'+n+'`';}).join(', ')+'\n\n'+fullMd);}catch(e){}
+    // 构建摘要 — 复用第一轮解析收集的 _sheetMetas，避免二次 sheet_to_json
+    var summary='# 表格解析结果 (完整版已分离存储)\n\n';
+    summary+='| 属性 | 值 |\n|------|------|\n';
+    summary+='| 工作表数量 | '+allNames.length+' |\n';
+    summary+='| 工作表列表 | '+allNames.map(function(n){return'`'+n+'`';}).join(', ')+' |\n';
+    summary+='| 完整解析结果 | 已存储至 `'+fullPath+'`，请用 filesystem read 读取 |\n';
+    summary+='| 文件大小 | '+formatSize(fullMd.length+200)+' |\n';
+    summary+='\n---\n\n';
+    // 每个工作表只给列摘要，不给数据
+    for(var n=0;n<_sheetMetas.length;n++){
+      var meta=_sheetMetas[n];
+      summary+='### '+meta.name+' ('+meta.totalRows+'行 x '+meta.colCount+'列)\n\n';
+      if(meta.totalRows>=2&&meta.colCount>0){
+        summary+='| 列名 | 类型 | 示例值 |\n|------|------|--------|\n';
+        for(var c=0;c<meta.colCount;c++){
+          var colName=meta.headers[c]||('列'+(c+1));
+          var samples=meta.colSamples[c]||[];
+          var typeHint=_sheetColumnInfer(samples);
+          var example=samples.slice(0,2).map(function(s){return'`'+(s.length>15?s.substring(0,15)+'...':s)+'`';}).join(', ')||'(空)';
+          summary+='| **'+colName.replace(/\|/g,'\\|')+'** | '+typeHint+' | '+example+' |\n';
+        }
+      }
+      summary+='\n';
+      if(summary.length>30000&&n<_sheetMetas.length-1){summary+='> 摘要过长，剩余工作表略。完整信息请读取 `'+fullPath+'`\n';break;}
+    }
+    summary+='\n> 完整解析结果已存储至: `'+fullPath+'`\n';
+    summary+='> 请使用 `filesystem read` 工具读取完整数据表格，支持 mode="chunked" 分段读取。\n';
+    return summary;
   };
 }
 
-// PPTX
-FILE_PARSERS['.pptx']=async function(arrayBuf){
+// PPTX — 保留 pptxJs 原始输出结构，超大时分离存储
+FILE_PARSERS['.pptx']=async function(arrayBuf,filePath){
   await loadLibrary('pptxjs');
   var result=await pptxJs.pptx2Txt(arrayBuf);
-  return result||'(PPTX解析为空)';
+  var text=result||'';
+  if(!text.trim())return '# PPTX 解析结果\n\n*(PPTX解析为空)*';
+  // pptxJs 输出自带幻灯片标记时直接使用，否则整体包装不做猜测切割
+  var hasSlideMarker=text.indexOf('Slide')>=0||text.indexOf('slide')>=0||text.indexOf('幻灯片')>=0;
+  var FULL_STORE_THRESHOLD=500000;
+  var fullMd='';
+  if(hasSlideMarker){
+    fullMd='# PPTX 解析结果\n\n'+text;
+  }else{
+    fullMd='# PPTX 解析结果\n\n- 幻灯片内容如下（pptxJs 未提供幻灯片边界标记）\n\n'+text;
+  }
+  if(fullMd.length<=FULL_STORE_THRESHOLD||!filePath){
+    return fullMd;
+  }
+  var fullPath=filePath+'.full';
+  try{await createFile(fullPath,fullMd);}catch(e){}
+  var summary='# PPTX 解析结果 (完整版已分离存储)\n\n';
+  summary+='| 属性 | 值 |\n|------|------|\n';
+  summary+='| 完整解析结果 | 已存储至 `'+fullPath+'`，请用 filesystem read 读取 |\n';
+  summary+='| 文件大小 | '+formatSize(fullMd.length)+' |\n';
+  summary+='| 总行数 | '+fullMd.split('\n').length+' |\n';
+  summary+='\n## 前3000字预览\n\n';
+  summary+=fullMd.replace(/^#.+$/gm,'').replace(/\n{3,}/g,'\n\n').substring(0,3000);
+  summary+='\n\n> 完整解析结果已存储至: `'+fullPath+'`\n';
+  summary+='> 请使用 `filesystem read` 工具读取完整内容，支持 mode="chunked" 分段读取。\n';
+  return summary;
 };
 
-// EPUB
-FILE_PARSERS['.epub']=async function(arrayBuf){
+// EPUB — 保留章节结构，尝试提取标题
+FILE_PARSERS['.epub']=async function(arrayBuf,filePath){
   await loadLibrary('jszip');
   var zip=await JSZip.loadAsync(arrayBuf);
   var containerFile=zip.file('META-INF/container.xml');
-  if(!containerFile)throw new Error('无效EPUB: 缺少container.xml');
+  if(!containerFile)throw new Error('EPUB: missing container.xml');
   var containerXml=await containerFile.async('text');
   var rootfileMatch=containerXml.match(/full-path="([^"]+)"/);
-  if(!rootfileMatch)throw new Error('无效EPUB: 未找到rootfile');
+  if(!rootfileMatch)throw new Error('EPUB: rootfile not found');
   var rootfilePath=rootfileMatch[1];
   var opfFile=zip.file(rootfilePath);
-  if(!opfFile)throw new Error('无效EPUB: 找不到'+rootfilePath);
+  if(!opfFile)throw new Error('EPUB: cannot find '+rootfilePath);
   var opfText=await opfFile.async('text');
   var spineMatch=opfText.match(/<spine[^>]*>([\s\S]*?)<\/spine>/);
-  if(!spineMatch)throw new Error('无效EPUB: 无spine');
+  if(!spineMatch)throw new Error('EPUB: no spine');
+  var titleMatch=opfText.match(/<dc:title[^>]*>([\s\S]*?)<\/dc:title>/);
+  var bookTitle=(titleMatch?titleMatch[1].trim():'Untitled');
   var idrefs=[];
   var idrefRe=/idref="([^"]+)"/g;
   var m;
@@ -3218,24 +3425,77 @@ FILE_PARSERS['.epub']=async function(arrayBuf){
     while((m2=itemRe.exec(manifestMatch[1]))!==null){idToHref[m2[1]]=m2[2];}
   }
   var opfDir=rootfilePath.replace(/\/[^\/]+$/,'');
-  var text='';
+  var FULL_STORE_THRESHOLD=500000;
+  var fullMd='# EPUB: '+bookTitle+'\n\n- 章节数: '+idrefs.length+'\n\n';
   for(var ri=0;ri<idrefs.length;ri++){
     var href=idToHref[idrefs[ri]];
     if(!href)continue;
-    var fullPath=opfDir?opfDir+'/'+href:href;
-    var htmlFile=zip.file(fullPath);
+    var chapterPath=opfDir?opfDir+'/'+href:href;
+    var htmlFile=zip.file(chapterPath);
     if(!htmlFile)continue;
     var htmlText=await htmlFile.async('text');
-    var stripped=htmlText.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-    text+=stripped+'\n\n';
-    if(text.length>50000){text+='\n...(以上为前50000字，EPUB内容较长，已省略后续章节)';break;}
+    // 提取标题
+    var chapterTitle='';
+    var hMatch=htmlText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if(!hMatch)hMatch=htmlText.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    if(!hMatch)hMatch=htmlText.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+    if(hMatch)chapterTitle=hMatch[1].replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#(\d+);/g,function(_,d){return String.fromCharCode(Number(d));}).replace(/&#x([0-9a-f]+);/gi,function(_,h){return String.fromCharCode(parseInt(h,16));}).trim();
+    // 提取正文
+    var body='';
+    var bodyMatch=htmlText.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    var content=bodyMatch?bodyMatch[1]:htmlText;
+    var cleaned=content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
+      .replace(/<head[^>]*>[\s\S]*?<\/head>/gi,'')
+      .replace(/<br\s*\/?>/gi,'\n')
+      .replace(/<\/p>/gi,'\n\n')
+      .replace(/<\/div>/gi,'\n')
+      .replace(/<li[^>]*>/gi,'\n- ')
+      .replace(/<\/li>/gi,'')
+      .replace(/<[^>]+>/g,'')
+      .replace(/&nbsp;/g,' ')
+      .replace(/&amp;/g,'&')
+      .replace(/&lt;/g,'<')
+      .replace(/&gt;/g,'>')
+      .replace(/&quot;/g,'"')
+      .replace(/\n{3,}/g,'\n\n')
+      .trim();
+    var chHeading=chapterTitle||('Chapter '+(ri+1));
+    fullMd+='## '+chHeading+'\n\n'+cleaned+'\n\n';
   }
-  return text||'(EPUB解析为空)';
+  if(fullMd.length<=FULL_STORE_THRESHOLD||!filePath){
+    return fullMd;
+  }
+  var fullPath=filePath+'.full';
+  try{await createFile(fullPath,fullMd);}catch(e){}
+  var summary='# EPUB: '+bookTitle+' (完整版已分离存储)\n\n';
+  summary+='| 属性 | 值 |\n|------|------|\n';
+  summary+='| 标题 | '+bookTitle+' |\n';
+  summary+='| 章节数 | '+idrefs.length+' |\n';
+  summary+='| 完整解析结果 | 已存储至 `'+fullPath+'`，请用 filesystem read 读取 |\n';
+  summary+='| 文件大小 | '+formatSize(fullMd.length)+' |\n';
+  summary+='\n## 目录 (前50章)\n\n';
+  var chCount=0;
+  var lines=fullMd.split('\n');
+  for(var i=0;i<lines.length;i++){
+    if(/^##\s/.test(lines[i])){summary+='- '+lines[i].replace(/^##\s/,'')+'\n';chCount++;if(chCount>=50)break;}
+  }
+  summary+='\n## 第1章预览 (前2000字)\n\n';
+  var firstChStart=fullMd.indexOf('\n## ');
+  if(firstChStart>=0){
+    var firstCh=fullMd.substring(firstChStart);
+    var secondChStart=firstCh.indexOf('\n## ',4);
+    if(secondChStart>0)firstCh=firstCh.substring(0,secondChStart);
+    summary+=firstCh.substring(0,2000)+(firstCh.length>2000?' ...':'');
+  }
+  summary+='\n\n> 完整解析结果已存储至: `'+fullPath+'`\n';
+  summary+='> 请使用 `filesystem read` 工具读取完整内容，支持 mode="chunked" 分段读取。\n';
+  return summary;
 };
 
-// 图片 — 存储为 data URL + OCR 预览
+// 图片 — 结构化 OCR 结果；Data URL 另存为 .b64 文件避免污染主文本
 for(var ii=0;ii<IMG_EXTS.length;ii++){
-  FILE_PARSERS[IMG_EXTS[ii]]=async function(arrayBuf,extName){
+  FILE_PARSERS[IMG_EXTS[ii]]=async function(arrayBuf,extName,filePath){
     var ext=extName||'.png';
     var bytes=new Uint8Array(arrayBuf);
     var binary='';
@@ -3243,17 +3503,65 @@ for(var ii=0;ii<IMG_EXTS.length;ii++){
     var b64=btoa(binary);
     var mime=IMG_MIME[ext]||'image/png';
     var dataUrl='data:'+mime+';base64,'+b64;
-    var ocrPreview='';
+    // Data URL 另存为独立 .b64 文件，避免主文件膨胀
+    if(filePath){
+      var b64Path=filePath.replace(/(\.[^.]+)$/,'.b64');
+      try{await createFile(b64Path,dataUrl);}catch(e){}
+    }
+    var ocrText='';
+    var ocrConfidence=0;
+    var ocrBlocks=[];
     try{
       await loadLibrary('tesseract');
       var blob=new Blob([arrayBuf]);
       var url=URL.createObjectURL(blob);
       var result=await Tesseract.recognize(url,'eng+chi_sim',{logger:function(){}});
       URL.revokeObjectURL(url);
-      ocrPreview=(result&&result.data&&result.data.text||'').trim();
-    }catch(e){/* OCR预览失败不影响上传 */}
-    var preview=ocrPreview?'\n[OCR预览] '+ocrPreview:'\n[OCR预览] (未识别到文字)';
-    return dataUrl+preview;
+      if(result&&result.data){
+        ocrText=(result.data.text||'').trim();
+        ocrConfidence=result.data.confidence||0;
+        if(result.data.blocks){
+          for(var bi=0;bi<result.data.blocks.length;bi++){
+            var block=result.data.blocks[bi];
+            var blockText=block.text||'';
+            if(blockText.trim()){
+              ocrBlocks.push({
+                block:bi+1,
+                confidence:Math.round((block.confidence||0)),
+                text:blockText.trim()
+              });
+            }
+          }
+        }
+      }
+    }catch(e){}
+    var out='# 图片解析结果\n\n';
+    out+='| 属性 | 值 |\n|------|------|\n';
+    out+='| 格式 | '+ext.replace('.','').toUpperCase()+' |\n';
+    out+='| 大小 | '+formatSize(arrayBuf.byteLength)+' |\n';
+    out+='| MIME | '+mime+' |\n';
+    if(filePath){
+      out+='| Data URL | 已另存至 `'+b64Path+'` |\n';
+    }else{
+      out+='| Data URL | `'+dataUrl.substring(0,60)+'...` |\n';
+    }
+    if(ocrText){
+      out+='| OCR 识别文字量 | '+ocrText.length+' 字符 |\n';
+      out+='| OCR 平均置信度 | '+Math.round(ocrConfidence)+'% |\n';
+      out+='\n---\n\n';
+      out+='## OCR 识别文字\n\n';
+      if(ocrBlocks.length>0){
+        for(var bi=0;bi<ocrBlocks.length;bi++){
+          var blk=ocrBlocks[bi];
+          out+='### 文字块 '+blk.block+' (置信度 '+blk.confidence+'%)\n\n'+blk.text+'\n\n';
+        }
+      }else{
+        out+=ocrText+'\n\n';
+      }
+    }else{
+      out+='| OCR | 未识别到文字 |\n';
+    }
+    return out;
   };
 }
 
@@ -16862,9 +17170,9 @@ async function handleFileUploads(files){
             var content;
             if(isImg){
               // 图片解析器需要 ext 参数（闭包安全）
-              content=await (function(aBuf,extName){return FILE_PARSERS[extName](aBuf,extName);})(arrayBuf,ext);
+              content=await (function(aBuf,extName,fPath){return FILE_PARSERS[extName](aBuf,extName,fPath);})(arrayBuf,ext,path);
             }else{
-              content=await parser(arrayBuf);
+              content=await parser(arrayBuf,path);
             }
             var contentLen=typeof content==='string'?content.length:0;
             if(!isImg&&contentLen>1024*1024){
@@ -17852,15 +18160,20 @@ function initEventBindings(){
               var r=new FileReader();r.onload=function(e){res(e.target.result);};r.onerror=function(){rej(new Error('读取失败'));};
               r.readAsArrayBuffer(file);
             });
+            var kbPath='/kb/'+safeName;
             if(IMG_EXTS.indexOf(ext)>=0){
-              text=await parser(arrayBuf,ext);
+              text=await parser(arrayBuf,ext,kbPath);
             }else{
-              text=await parser(arrayBuf);
+              text=await parser(arrayBuf,kbPath);
             }
-            // 如果解析器返回的是data: URL（图片），提取OCR预览文本
-            if(typeof text==='string'&&text.indexOf('data:image/')===0){
-              var ocrIdx=text.indexOf('\n[OCR预览] ');
-              text=ocrIdx>=0?text.substring(ocrIdx+12).trim():'[图片文件: '+safeName+']';
+            // 如果解析器返回的是 Markdown 图片解析结果，截取 OCR 文字作为知识条目内容
+            if(typeof text==='string'&&text.indexOf('# 图片解析结果')===0){
+              var ocrMatch=text.match(/## OCR 识别文字\n\n([\s\S]*)$/);
+              if(ocrMatch&&ocrMatch[1].trim()){
+                text=ocrMatch[1].replace(/^### 文字块 \d+ \(置信度 \d+%\)\n\n/gm,'').trim();
+              }else{
+                text='[图片文件: '+safeName+']';
+              }
             }
           }else{
             // 无解析器 → 降级读文本
