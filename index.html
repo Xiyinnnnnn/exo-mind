@@ -1038,8 +1038,8 @@ button,label,[role="button"],.file-upload-btn{
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 table_generator</span><label class="toggle-switch"><input type="checkbox" id="settingTableEnabled" checked><span class="toggle-slider"></span></label></label></div>
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 word_generator</span><label class="toggle-switch"><input type="checkbox" id="settingWordEnabled" checked><span class="toggle-slider"></span></label></label></div>
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 mcts_plan</span><label class="toggle-switch"><input type="checkbox" id="settingMctsEnabled" checked><span class="toggle-slider"></span></label></label></div>
-        <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 ocr</span><label class="toggle-switch"><input type="checkbox" id="settingOcrEnabled" checked><span class="toggle-slider"></span></label></label></div>
-        <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 pdf_read / pdf_generate</span><label class="toggle-switch"><input type="checkbox" id="settingPdfEnabled" checked><span class="toggle-slider"></span></label></label></div>
+        <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用读图(视觉)</span><label class="toggle-switch"><input type="checkbox" id="settingImageEnabled"><span class="toggle-slider"></span></label></label></div>
+        <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 pdf_generate</span><label class="toggle-switch"><input type="checkbox" id="settingPdfEnabled" checked><span class="toggle-slider"></span></label></label></div>
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 convert_format</span><label class="toggle-switch"><input type="checkbox" id="settingConvertEnabled" checked><span class="toggle-slider"></span></label></label></div>
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 archive</span><label class="toggle-switch"><input type="checkbox" id="settingArchiveEnabled" checked><span class="toggle-slider"></span></label></label></div>
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 flow_mode</span><label class="toggle-switch"><input type="checkbox" id="settingFlowModeEnabled" checked><span class="toggle-slider"></span></label></label></div>
@@ -1955,10 +1955,8 @@ var TOOL_REGISTRY={
     parameters:{type:'object',properties:{query:{type:'string',description:'搜索关键词。有file搜内容，仅path搜文件名'},file:{type:'string',description:'搜文件内容(传此搜内容+行号)'},path:{type:'string',default:'/',description:'搜文件名(仅无file时生效)'},limit:{type:'number',default:10,description:'返回条数默认10'}},required:['query']}},
   'mcts_plan':{name:'mcts_plan',description:'MCTS多步规划。mode:fast(150sims)/standard(600sims,thinking)。',executor:'main_thread',
     parameters:{type:'object',properties:{problem:{type:'string'},goal:{type:'string'},constraints:{type:'string'},mode:{type:'string',enum:['fast','standard'],default:'fast'}},required:['problem','goal']}},
-  'ocr':{name:'ocr',description:'图片OCR(Tesseract)。传filename或image_base64。结果存.ocr.txt。',executor:'task_worker',
-    parameters:{type:'object',properties:{filename:{type:'string'},image_base64:{type:'string'},language:{type:'string',enum:['chi_sim','chi_tra','eng','jpn','kor','fra','deu','spa'],default:'chi_sim'}},required:[]}},
-  'pdf_read':{name:'pdf_read',description:'读PDF。mode:text/structured/metadata。pages如"1-5"。',executor:'main_thread',
-    parameters:{type:'object',properties:{filename:{type:'string'},mode:{type:'string',enum:['text','structured','metadata'],default:'text'},pages:{type:'string'},maxPages:{type:'number',default:50}},required:['filename']}},
+  'read_image':{name:'read_image',description:'读图。将已上传图片发送给模型进行视觉理解。',executor:'main_thread',
+    parameters:{type:'object',properties:{filename:{type:'string',description:'图片文件名，如 photo.jpg'}},required:['filename']}},
   'pdf_generate':{name:'pdf_generate',description:'生成PDF(Markdown->html2pdf)。GFM兼容。',executor:'main_thread',
     parameters:{type:'object',properties:{content:{type:'string'},format:{type:'string',enum:['markdown','html'],default:'markdown'},title:{type:'string'},filename:{type:'string',default:'document'},pageSize:{type:'string',enum:['A4','Letter','A3'],default:'A4'}},required:['content']}},
   'custom_api_call':{name:'custom_api_call',description:'HTTP API。支持{{VAR}}模板。method:GET/POST/PUT/DELETE/PATCH。',executor:'main_thread',
@@ -2102,7 +2100,7 @@ var TOOL_DOCS={
 5. 不再需要: `+"`"+`help unset "<id>"`+"`"+` 卸载释放上下文
 
 ### 扩展工具清单(需载入)
-chart / diagram / svg_animator / table_generator / word_generator / mcts_plan / ocr / pdf_read / pdf_generate / custom_api_call / mcp_connect / user_function_call / convert_format / geo_search / geo_geocode / geo_ip / send_email / sql_db / browser_notify / archive / speech_tts / speech_stt / calendar / pipeline / reqalign / generatespec / world_validator / flow_mode`,
+chart / diagram / svg_animator / table_generator / word_generator / mcts_plan / read_image / pdf_generate / custom_api_call / mcp_connect / user_function_call / convert_format / geo_search / geo_geocode / geo_ip / send_email / sql_db / browser_notify / archive / speech_tts / speech_stt / calendar / pipeline / reqalign / generatespec / world_validator / flow_mode`,
 
 
   'filesystem':`## filesystem — 虚拟文件系统
@@ -2445,39 +2443,17 @@ SVG会被安全检查，禁止: on*事件、<script>、javascript:、<foreignObj
 - simulations/regret_ratio/value_stdev: 收敛指标
 - stats: 搜索统计(节点数/边数/API调用数)`,
 
-  'ocr':`## ocr — 图片OCR
-识别图片中的文字(Tesseract.js)。两种传图方式。
+  'read_image':`## read_image — 读图(视觉)
+将已上传图片发送给模型进行视觉理解（看图说话、图表分析等）。
 
 ### 参数
-- **filename**: 已上传图片文件名(与image_base64二选一)
-- **image_base64**: 直接传base64图片(与filename二选一)
-- **language**: chi_sim(简体中文,默认)/chi_tra(繁体)/eng/jpn/kor/fra/deu/spa
+- **filename**: 图片文件名，如 photo.jpg
 
 ### 最小示例
-`+"`"+`ocr filename="screenshot.png"`+"`"+`
-`+"`"+`ocr image_base64="data:image/png;base64,iVBORw0KGgo..." language="eng"`+"`"+`
-`+"`"+`ocr filename="document.jpg" language="chi_sim"`+"`"+`
+`+"`"+`read_image filename="chart.png"`+"`"+`
 ### 注意事项
-- 结果自动保存为 /downloads/{filename}.ocr.txt
-- 首次使用需加载Tesseract WASM(~15MB)`,
-
-  'pdf_read':`## pdf_read — PDF读取
-读取PDF文件提取文本。支持 /uploads/ 和 /downloads/ 两个目录。
-
-### 参数
-- **filename**: PDF文件名。上传的在/uploads/, 生成的在/downloads/
-- **mode**: text(纯文本,默认) / structured(JSON分页,含charCount) / metadata(仅元信息,含页数)
-- **pages**: 页码范围如 "1-5" 或 "1,3,5", 不填=全部
-- **maxPages**: 最大读取页数, 默认50
-
-### 最小示例
-`+"`"+`pdf_read filename="report.pdf"`+"`"+`
-`+"`"+`pdf_read filename="book.pdf" pages="1-10" mode="text"`+"`"+`
-`+"`"+`pdf_read filename="doc.pdf" mode="structured"`+"`"+`
-`+"`"+`pdf_read filename="paper.pdf" mode="metadata"`+"`"+`
-### 注意事项
-- 文件需在 /uploads/ (上传) 或 /downloads/ (生成) 中
-- 默认最多读50页，超限用 pages 参数分批读取`,
+- 仅当"启用读图(视觉)"设置开启后可用
+- 关闭时，图片上传后自动OCR提取文字，用 filesystem read 读取`,
 
   'pdf_generate':`## pdf_generate — PDF生成
 Markdown/HTML → PDF (html2pdf.js)。GFM兼容、中文渲染正常。输出到 /downloads/xxx.pdf。
@@ -3510,6 +3486,20 @@ for(var ii=0;ii<IMG_EXTS.length;ii++){
       var b64Path=filePath.replace(/(\.[^.]+)$/,'.b64');
       try{await createFile(b64Path,dataUrl);}catch(e){}
     }
+    // ★ 读图模式：关闭→自动OCR；开启→只存原图，跳过OCR
+    if(typeof settings!=='undefined'&&settings.image_enabled){
+      var out='# 图片（已保存）\n\n';
+      out+='| 属性 | 值 |\n|------|------|\n';
+      out+='| 格式 | '+ext.replace('.','').toUpperCase()+' |\n';
+      out+='| 大小 | '+formatSize(arrayBuf.byteLength)+' |\n';
+      out+='| MIME | '+mime+' |\n';
+      if(filePath){
+        out+='| Data URL | 已另存至 `'+b64Path+'` |\n';
+      }
+      out+='\n> 读图模式已启用，请用 read_image 工具将此图片发送给模型。\n';
+      return out;
+    }
+    // 默认：自动OCR
     var ocrText='';
     var ocrConfidence=0;
     var ocrBlocks=[];
@@ -3582,7 +3572,7 @@ var SKILL_SCHEMA={
     editable:{type:'boolean',default:true},
     parent_id:{type:'string'},
     prompt_fragment:{type:'string',minLength:1,maxLength:4000},
-    tools:{type:'array',items:{type:'object',required:['tool_name'],properties:{tool_name:{type:'string',enum:['search','filesystem','chart','diagram','svg_animator','calculator','table_generator','word_generator','fuzzy_search','ocr','custom_api_call']},params:{type:'object'}}}},
+    tools:{type:'array',items:{type:'object',required:['tool_name'],properties:{tool_name:{type:'string',enum:['search','filesystem','chart','diagram','svg_animator','calculator','table_generator','word_generator','fuzzy_search','read_image','custom_api_call']},params:{type:'object'}}}},
     custom_functions:{type:'array',items:{type:'object',required:['name','language','code'],properties:{name:{type:'string',pattern:'^[a-zA-Z_][a-zA-Z0-9_]*$'},language:{type:'string',enum:['javascript']},code:{type:'string',maxLength:10000}}}},
     custom_api_calls:{type:'array',items:{type:'object',required:['method','url'],properties:{method:{type:'string',enum:['GET','POST','PUT','DELETE','PATCH']},url:{type:'string',pattern:'^https://[a-zA-Z0-9.-]+/.*$'},headers:{type:'object'},body_template:{type:'object'}}}}
   }
@@ -3689,8 +3679,7 @@ var settings={
   table_enabled:true,
   word_enabled:true,
   mcts_enabled:true,
-  ocr_enabled:true,
-  pdf_enabled:true,
+  image_enabled:false,
   convert_enabled:true,
   archive_enabled:true,
   flow_mode_enabled:true,
@@ -4866,8 +4855,7 @@ async function saveSettings(){
     table_enabled:     _read('table_enabled','settingTableEnabled','checked',_bool,true),
     word_enabled:      _read('word_enabled','settingWordEnabled','checked',_bool,true),
     mcts_enabled:      _read('mcts_enabled','settingMctsEnabled','checked',_bool,true),
-    ocr_enabled:       _read('ocr_enabled','settingOcrEnabled','checked',_bool,true),
-    pdf_enabled:       _read('pdf_enabled','settingPdfEnabled','checked',_bool,true),
+    image_enabled:     _read('image_enabled','settingImageEnabled','checked',_bool,false),
     convert_enabled:   _read('convert_enabled','settingConvertEnabled','checked',_bool,true),
     archive_enabled:   _read('archive_enabled','settingArchiveEnabled','checked',_bool,true),
     flow_mode_enabled: _read('flow_mode_enabled','settingFlowModeEnabled','checked',_bool,true),
@@ -4902,8 +4890,8 @@ async function saveSettings(){
   TOOL_REGISTRY['table_generator'].disabled=!newSettings.table_enabled;
   TOOL_REGISTRY['word_generator'].disabled=!newSettings.word_enabled;
   TOOL_REGISTRY['mcts_plan'].disabled=!newSettings.mcts_enabled;
-  TOOL_REGISTRY['ocr'].disabled=!newSettings.ocr_enabled;
-  TOOL_REGISTRY['pdf_read'].disabled=TOOL_REGISTRY['pdf_generate'].disabled=!newSettings.pdf_enabled;
+  TOOL_REGISTRY['read_image'].disabled=!newSettings.image_enabled;
+  TOOL_REGISTRY['pdf_generate'].disabled=!newSettings.pdf_enabled;
   TOOL_REGISTRY['convert_format'].disabled=!newSettings.convert_enabled;
   TOOL_REGISTRY['archive'].disabled=!newSettings.archive_enabled;
   TOOL_REGISTRY['flow_mode'].disabled=!newSettings.flow_mode_enabled;
@@ -4984,8 +4972,7 @@ function applySettingsToUI(){
     {el:'settingTableEnabled',        key:'table_enabled',          type:'checked', def:true},
     {el:'settingWordEnabled',         key:'word_enabled',           type:'checked', def:true},
     {el:'settingMctsEnabled',         key:'mcts_enabled',           type:'checked', def:true},
-    {el:'settingOcrEnabled',          key:'ocr_enabled',            type:'checked', def:true},
-    {el:'settingPdfEnabled',          key:'pdf_enabled',            type:'checked', def:true},
+    {el:'settingImageEnabled',        key:'image_enabled',          type:'checked', def:false},
     {el:'settingConvertEnabled',      key:'convert_enabled',        type:'checked', def:true},
     {el:'settingArchiveEnabled',      key:'archive_enabled',        type:'checked', def:true},
     {el:'settingFlowModeEnabled',     key:'flow_mode_enabled',      type:'checked', def:true},
@@ -5047,8 +5034,8 @@ function applySettingsToUI(){
   TOOL_REGISTRY['table_generator'].disabled=!settings.table_enabled;
   TOOL_REGISTRY['word_generator'].disabled=!settings.word_enabled;
   TOOL_REGISTRY['mcts_plan'].disabled=!settings.mcts_enabled;
-  TOOL_REGISTRY['ocr'].disabled=!settings.ocr_enabled;
-  TOOL_REGISTRY['pdf_read'].disabled=TOOL_REGISTRY['pdf_generate'].disabled=!settings.pdf_enabled;
+  TOOL_REGISTRY['read_image'].disabled=!settings.image_enabled;
+  TOOL_REGISTRY['pdf_generate'].disabled=!settings.pdf_enabled;
   TOOL_REGISTRY['convert_format'].disabled=!settings.convert_enabled;
   TOOL_REGISTRY['archive'].disabled=!settings.archive_enabled;
   TOOL_REGISTRY['flow_mode'].disabled=!settings.flow_mode_enabled;
@@ -10323,7 +10310,7 @@ function _toolType(name, result) {
     case 'help':           return 'tool_documentation';
     case 'semantic_memory': case 'longterm_memory': case 'knowledge_base':
       return result.indexOf('未找到')>=0 ? 'empty' : 'memory_records';
-    case 'ocr': case 'pdf_read': return 'document_content';
+    case 'read_image': return 'document_content';
     case 'chart': case 'diagram': case 'svg_animator': case 'table_generator':
       return 'html_artifact';
     case 'sql_db':
@@ -10397,7 +10384,6 @@ async function executeMainThreadTool(toolName,args){
     case 'longterm_memory':return await toolLongtermMemory(args);
     case 'knowledge_base':return await toolKnowledgeBase(args);
     case 'skill_manager':return await toolSkillManager(args);
-    case 'pdf_read':return await toolPdfRead(args);
     case 'pdf_generate':return await toolPdfGenerate(args);
     case 'custom_api_call':return await toolCustomApiCall(args);
     case 'mcp_connect':return await toolMcpConnect(args);
@@ -10412,6 +10398,7 @@ async function executeMainThreadTool(toolName,args){
     case 'archive':return await toolArchive(args);
     case 'speech_tts':return await toolSpeechTTS(args);
     case 'speech_stt':return await toolSpeechSTT(args);
+    case 'read_image':return await toolReadImage(args);
     case 'calendar':return await toolCalendar(args);
     case 'precise_time':return await toolPreciseTime(args);
     case 'pipeline':return await toolPipeline(args);
@@ -10831,34 +10818,29 @@ async function toolKnowledgeBase(args){
 }
 
 // ═══════════════════════════════════════════════════════════════
-// V5 新增工具实现：pdf_read / pdf_generate / custom_api_call /
-//   mcp_connect / convert_format / geo_* / send_email
-// ═══════════════════════════════════════════════════════════════
 
-// --- PDF 读取 ---
-async function toolPdfRead(args){
+// --- 读图（视觉）---
+async function toolReadImage(args){
   if(!args.filename) throw new Error('请指定 filename');
-  await loadLibrary('pdfjs');
-  await _setupPdfWorker();
   var filename=args.filename;
-  // 智能路径解析：直接查找 → /uploads/前缀 → /downloads/前缀 → 报错
   var content=await readFile(filename);
   if(!content){content=await readFile('/uploads/'+filename);}
   if(!content){content=await readFile('/downloads/'+filename);}
-  if(!content) return ' 文件不存在: '+filename+'。已尝试路径: '+filename+'、/uploads/'+filename+'、/downloads/'+filename+'。';
-  var arrayBuf;
-  if(content instanceof Blob){arrayBuf=await content.arrayBuffer();}
-  else if(content.indexOf('data:')===0){var b64=content.split(',')[1];var binary=atob(b64);arrayBuf=new Uint8Array(binary.length);for(var i=0;i<binary.length;i++)arrayBuf[i]=binary.charCodeAt(i);}
-  else{arrayBuf=new TextEncoder().encode(content);}
-  var pdf=await pdfjsLib.getDocument({data:arrayBuf}).promise;
-  if(args.mode==='metadata'){var meta=await pdf.getMetadata();return JSON.stringify({pages:pdf.numPages,info:meta.info||{}},null,2);}
-  var maxPages=Math.min(pdf.numPages,args.maxPages||50);
-  var pagesToRead=[];
-  if(args.pages){var parts=args.pages.split(',');for(var p=0;p<parts.length;p++){var range=parts[p].trim().split('-');if(range.length===2){for(var r=parseInt(range[0]);r<=Math.min(parseInt(range[1]),maxPages);r++)pagesToRead.push(r);}else{var n=parseInt(range[0]);if(n<=maxPages)pagesToRead.push(n);}}}
-  else{for(var j=1;j<=maxPages;j++)pagesToRead.push(j);}
-  if(args.mode==='structured'){var result=[];for(var k=0;k<pagesToRead.length;k++){var pg=pagesToRead[k];var page=await pdf.getPage(pg);var text=await page.getTextContent();result.push({page:pg,text:text.items.map(function(it){return it.str;}).join(' '),charCount:text.items.reduce(function(s,it){return s+it.str.length;},0)});}return JSON.stringify(result,null,2);}
-  var pages=[];for(var kk=0;kk<pagesToRead.length;kk++){var pg2=pagesToRead[kk];var page2=await pdf.getPage(pg2);var text2=await page2.getTextContent();pages.push('--- 第'+pg2+'页 ---\n'+text2.items.map(function(it){return it.str;}).join(' '));}
-  return '[PDF: '+args.filename+' | '+pdf.numPages+'页 | 已读'+pagesToRead.length+'页]\n\n'+pages.join('\n\n');
+  if(typeof content==='string'&&content.indexOf('# 图片')===0){
+    var b64Path=filename.replace(/(\.[^.]+)$/,'.b64');
+    var b64Content=await readFile(b64Path);
+    if(!b64Content){b64Content=await readFile('/uploads/'+b64Path);}
+    if(!b64Content){b64Content=await readFile('/downloads/'+b64Path);}
+    if(b64Content&&typeof b64Content==='string'&&b64Content.indexOf('data:image/')===0){
+      content=b64Content;
+    }else{
+      throw new Error('图片 '+filename+' 没有可用的原始图像数据。请确认上传时已开启读图模式。');
+    }
+  }
+  if(!content||(typeof content==='string'&&content.indexOf('data:image/')!==0)){
+    throw new Error('图片数据不可用: '+filename);
+  }
+  return '__IMAGE__:'+content;
 }
 
 // --- PDF 生成 ---
@@ -11043,7 +11025,7 @@ var CONVERT_MAP={
   'md→html':async function(content,opt){await loadLibrary('markdown-it');return'<!DOCTYPE html>\n<html><body>\n'+window.markdownit().render(content)+'\n</body></html>';},
   'html→md':async function(content,opt){var t=content.replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n\n').replace(/<[^>]+>/g,'');return t.replace(/\n{3,}/g,'\n\n').trim();},
   'csv→xlsx':async function(content,opt){await loadLibrary('xlsx');var arr=content.trim().split('\n').map(function(l){return l.split(',');});var ws=XLSX.utils.aoa_to_sheet(arr);var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sheet1');var buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});return new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});},
-  'xlsx→csv':async function(content,opt){await loadLibrary('xlsx');var wb=XLSX.read(new Uint8Array(content.length).map(function(_,i){return content.charCodeAt(i);}),{type:'array'});var out='';for(var n=0;n<wb.SheetNames.length;n++){out+=(n>0?'\n\n':'')+XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[n]]);}return out;}
+  'xlsx→csv':async function(content,opt){if(typeof content==='string'&&content.indexOf('# 表格解析结果')===0){throw new Error('此文件上传时已解析为表格Markdown，无需再次转换。请直接用 filesystem read 读取。');}await loadLibrary('xlsx');var wb=XLSX.read(new Uint8Array(content.length).map(function(_,i){return content.charCodeAt(i);}),{type:'array'});var out='';for(var n=0;n<wb.SheetNames.length;n++){out+=(n>0?'\n\n':'')+XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[n]]);}return out;}
 };
 
 function parseCSV(line){var result=[],current='',inQuotes=false;for(var i=0;i<line.length;i++){var c=line[i];if(inQuotes){if(c==='"'){if(i+1<line.length&&line[i+1]==='"'){current+='"';i++;}else{inQuotes=false;}}else{current+=c;}}else{if(c==='"'){inQuotes=true;}else if(c===','){result.push(current);current='';}else{current+=c;}}}result.push(current);return result;}
@@ -13958,24 +13940,6 @@ async function executeTaskWorkerTool(toolName,args){
     }
 
     case 'fuzzy_search':return await toolFuzzySearch(args);
-    case 'ocr':{
-      var imgContent=args.image_base64;
-      if(!imgContent&&args.filename){
-        imgContent=await readFile('/uploads/'+args.filename);
-        if(!imgContent)throw new Error('图片不存在: '+args.filename+'。请先上传或直接传 image_base64 参数。');
-      }
-      if(!imgContent)throw new Error('请提供 filename 或 image_base64');
-      if(imgContent.indexOf('data:image/')!==0&&imgContent.indexOf('/9j/')!==0)throw new Error('图片数据格式无效，需 base64(data:image/...) 或 JPEG raw');
-      var resp=await sendToTaskWorker('ocr',{image_data:imgContent,language:args.language||'chi_sim'},60000);
-      if(!resp||!resp.success)throw new Error(resp?resp.error:'OCR识别失败');
-      var text=resp.data.text;
-      var saveName=(args.filename||'ocr_'+Date.now())+'.ocr.txt';
-      var ocrPath='/uploads/'+saveName;
-      try{await createFile(ocrPath,text);}catch(e){}
-      var previewLen=Math.min(20000,text.length);
-      return '[OCR完成 | 语言:'+(args.language||'chi_sim')+' | 置信度:'+Math.round(resp.data.confidence)+'% | 耗时:'+resp.data.elapsed_ms+'ms | ~'+text.replace(/\\s/g,'').length+'字 | 已保存:'+ocrPath+']\n---\n'+text.substring(0,previewLen)+(text.length>previewLen?'\n...(截断,完整内容已保存至 '+ocrPath+')':'');
-
-    }
     default:throw new Error('Unsupported task worker tool: '+toolName);
   }
 }
@@ -15149,6 +15113,21 @@ async function processUserMessage(userText,taskId){
       // 添加工具结果到消息
       for(var tr=0;tr<toolResults.length;tr++){
         messages.push(toolResults[tr]);
+      }
+
+      // ★ 读图注入 — 检测 read_image 返回的 __IMAGE__: 标记，转为多模态消息
+      for(var ri=0;ri<toolResults.length;ri++){
+        var _tc=pendingToolCalls[ri];
+        var _c=toolResults[ri]&&toolResults[ri].content||'';
+        if(_tc&&_tc.function&&_tc.function.name==='read_image'&&typeof _c==='string'){
+          var _pos=_c.indexOf('__IMAGE__:');
+          if(_pos!==-1){
+            var _imgUrl=_c.substring(_pos+'__IMAGE__:'.length);
+            var _nl=_imgUrl.indexOf('\n');
+            if(_nl!==-1)_imgUrl=_imgUrl.substring(0,_nl);
+            messages.push({role:'user',content:[{type:'image_url',image_url:{url:_imgUrl}},{type:'text',text:'请分析上面的图片'}],_injected:true});
+          }
+        }
       }
 
       // ★ TODO 注入 — 累计token消耗>100000或dirty标记时注入当前进度
@@ -17012,7 +16991,6 @@ function getTriggeredSkillFragments(userText){
     'diagram':['流程图','时序图','状态图','甘特图','类图','mermaid','架构图'],
     'table_generator':['表格','导出csv','导出xlsx','生成表格','数据表'],
     'word_generator':['word','docx','文档导出','生成文档'],
-    'pdf_read':['读取pdf','pdf内容','查看pdf'],
     'pdf_generate':['生成pdf','导出pdf','pdf报告'],
     'sql_db':['sql','数据库','查询语句','建表','sqlite'],
     'geo_search':['附近','周边','餐厅','咖啡','地图搜索','POI'],
@@ -17022,7 +17000,7 @@ function getTriggeredSkillFragments(userText){
     'speech_tts':['朗读','语音','tts','文字转语音'],
     'speech_stt':['语音识别','录音','stt'],
     'calendar':['日程','日历','提醒','定时'],
-    'ocr':['ocr','图片文字','识别文字','提取文字'],
+    'read_image':['读图','看图','图片理解','视觉分析','图片内容'],
     'pipeline':['流水线','多步骤','自动化流程','子agent','编排'],
     'svg_animator':['svg','动画','矢量图'],
     'convert_format':['格式转换','json转csv','yaml转换'],
@@ -17700,8 +17678,7 @@ async function resetSystem(){
       table_enabled:true,
       word_enabled:true,
       mcts_enabled:true,
-      ocr_enabled:true,
-      pdf_enabled:true,
+      image_enabled:false,
       convert_enabled:true,
       archive_enabled:true,
       flow_mode_enabled:true,
