@@ -958,6 +958,7 @@ button,label,[role="button"],.file-upload-btn{
         <h3> 世界验证</h3><span class="section-arrow collapsed">▼</span>
       </div>
       <div class="section-body collapsed">
+        <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 world_validator</span><label class="toggle-switch"><input type="checkbox" id="settingWorldValidatorEnabled" checked><span class="toggle-slider"></span></label></label><div class="help-text">关闭后 agent 无法使用 world_validator 工具</div></div>
         <div id="worldEntriesList" style="max-height:200px;overflow-y:auto;margin-bottom:8px"><em style="color:#999;font-size:12px">暂无世界定义</em></div>
         <div class="kb-add-form" id="worldAddForm" style="display:none">
           <input type="text" id="worldName" placeholder="世界名称（必填）">
@@ -3685,6 +3686,7 @@ var settings={
   calendar_wake_prompt:'',
   calendar_wake_interval:30,
   stt_endpoint:'',
+  world_validator_enabled:true,
   pipeline_enabled:true
 };
 var budgetUsed=0;
@@ -4938,7 +4940,8 @@ async function saveSettings(){
     convert_enabled:   _read('convert_enabled','settingConvertEnabled','checked',_bool,true),
     archive_enabled:   _read('archive_enabled','settingArchiveEnabled','checked',_bool,true),
     flow_mode_enabled: _read('flow_mode_enabled','settingFlowModeEnabled','checked',_bool,true),
-    vis_network_enabled: _read('vis_network_enabled','settingVisNetworkEnabled','checked',_bool,true)
+    vis_network_enabled: _read('vis_network_enabled','settingVisNetworkEnabled','checked',_bool,true),
+    world_validator_enabled: _read('world_validator_enabled','settingWorldValidatorEnabled','checked',_bool,true)
   };
   // ★ 自动比例默认值：读取旧文件中的 daily_token_limit（oldDaily），
   //   若派生字段仍等于「旧硬编码默认值」或「oldDaily 的比例值 → 说明从未被用户手动修改 → 自动更新
@@ -4974,6 +4977,7 @@ async function saveSettings(){
   TOOL_REGISTRY['convert_format'].disabled=!newSettings.convert_enabled;
   TOOL_REGISTRY['archive'].disabled=!newSettings.archive_enabled;
   TOOL_REGISTRY['flow_mode'].disabled=!newSettings.flow_mode_enabled;
+  TOOL_REGISTRY['world_validator'].disabled=!newSettings.world_validator_enabled;
   TOOL_REGISTRY['vis_network'].disabled=!newSettings.vis_network_enabled;
   var existing=await readFile('/config/settings.json');
   if(existing!==null){
@@ -5055,7 +5059,8 @@ function applySettingsToUI(){
     {el:'settingConvertEnabled',      key:'convert_enabled',        type:'checked', def:true},
     {el:'settingArchiveEnabled',      key:'archive_enabled',        type:'checked', def:true},
     {el:'settingFlowModeEnabled',     key:'flow_mode_enabled',      type:'checked', def:true},
-    {el:'settingVisNetworkEnabled',   key:'vis_network_enabled',    type:'checked', def:true}
+    {el:'settingVisNetworkEnabled',   key:'vis_network_enabled',    type:'checked', def:true},
+    {el:'settingWorldValidatorEnabled',key:'world_validator_enabled',type:'checked', def:true}
   ];
 
   for(var bi=0;bi<BINDINGS.length;bi++){
