@@ -291,12 +291,14 @@ body{
 .conversation-item{
   display:flex;align-items:center;justify-content:space-between;
   padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;
-  margin-bottom:4px;transition:background .15s;gap:8px;
+  margin-bottom:4px;transition:background .15s;gap:8px;position:relative;
+  -webkit-tap-highlight-color:transparent;
 }
 .conversation-item:hover{background:var(--color-bg)}
+.conversation-item:active{background:rgba(79,110,247,0.12)}
 .conversation-item.active{background:#e8edff;font-weight:600}
 .conversation-item .conv-title{
-  flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   color:var(--color-text);
 }
 .conversation-item .conv-time{font-size:11px;color:var(--color-text-secondary);flex-shrink:0}
@@ -306,6 +308,7 @@ body{
   cursor:pointer;font-size:10px;line-height:1.4;flex-shrink:0;
 }
 .conversation-item .conv-delete-btn:hover{opacity:0.85}
+.conversation-item.bg-processing{padding-left:20px}.conversation-item.bg-processing::before{content:'';position:absolute;left:8px;top:50%;transform:translateY(-50%);width:6px;height:6px;border-radius:50%;background:#f39c12;animation:pulse 1s infinite}
 .sidebar-overlay{
   display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);
   z-index:89;touch-action:manipulation;
@@ -3853,7 +3856,7 @@ function _isToolActive(convId,toolName){
   var _prop=function(key,defVal){
     Object.defineProperty(window,key,{
       get:function(){var cs=_ensureConvState(currentConversationId);return cs?(cs[key]!=null?cs[key]:defVal):defVal;},
-      set:function(v){var cs=_ensureConvState(currentConversationId);if(cs)cs[key]=v;},
+      set:function(v){var cs=_ensureConvState(currentConversationId);if(cs)cs[key]=v;if(key==='isProcessing')_updateConvStatusDot(currentConversationId);},
       configurable:true,enumerable:true
     });
   };
@@ -3862,6 +3865,13 @@ function _isToolActive(convId,toolName){
   _prop('activeLLMController',null);
   _prop('activeStreamReader',null);
 })();
+function _updateConvStatusDot(convId){
+  if(!convId)return;
+  var list=document.getElementById('conversationList');if(!list)return;
+  var item=list.querySelector('[data-conv-id="'+convId+'"]');if(!item)return;
+  var bgCs=_ensureConvState(convId);var isBg=bgCs&&bgCs.isProcessing;
+  item.classList.toggle('bg-processing',!!isBg);
+}
 // 【多对话并行】后台流式锁定目标对话，防止切换后写入错误对话
 var _streamTargetConvId=null;
 // 【多对话并行】当前对话→可见DOM；后台对话→独立容器
@@ -15319,7 +15329,7 @@ _critiqueMessages.push({
 async function processUserMessage(userText,taskId){
   var cs=_ensureConvState(currentConversationId);
   if(!cs||cs.isProcessing)return;
-  cs.isProcessing=true;
+  isProcessing=true;
   cs.stopRequested=false;
   cs.currentTaskId=taskId;
   cs._origConvId=currentConversationId; // 记录发起对话，finally用于判断是否切回
@@ -16438,7 +16448,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
     // 【多对话并行】重置当前对话的处理状态
     if(_streamTargetConvId===cs._origConvId)_streamTargetConvId=null;
     // ★ cs.isProcessing 已在心流触发块中管理，此处不再重复置 false
-    if(!(flowSession()&&flowSession().active))cs.isProcessing=false;
+    if(!(flowSession()&&flowSession().active))isProcessing=false;
     cs.stopRequested=false;
     cs.llmController=null;
     cs.streamReader=null;
@@ -18580,7 +18590,7 @@ function initEventBindings(){
   var userInput=document.getElementById('userInput');
   function _stopGeneration(){
     var cs=_ensureConvState(currentConversationId);
-    if(cs){cs.stopRequested=true;cs.isProcessing=false;}
+    if(cs){cs.stopRequested=true;isProcessing=false;}
     if(cs&&cs.llmController){try{cs.llmController.abort();}catch(e){}cs.llmController=null;}
     if(cs&&cs.streamReader){try{cs.streamReader.cancel();}catch(e){}cs.streamReader=null;}
     // ★ 全局变量代理自动写入 cs，无需单独赋值
@@ -18591,7 +18601,7 @@ function initEventBindings(){
   function _stopGenerationSilent(){
     // 静默中断（保留用于极端场景）
     var cs=_ensureConvState(currentConversationId);
-    if(cs){cs.stopRequested=true;cs.isProcessing=false;}
+    if(cs){cs.stopRequested=true;isProcessing=false;}
     if(cs&&cs.llmController){try{cs.llmController.abort();}catch(e){}cs.llmController=null;}
     if(cs&&cs.streamReader){try{cs.streamReader.cancel();}catch(e){}cs.streamReader=null;}
   }
@@ -20034,14 +20044,14 @@ async function switchConversation(convId,forceSwitch){
   }else{
     msgList.innerHTML='';
     try{
-      var db=await getDB();
+      var db=await getDB();if(currentConversationId!==convId)return;
       var tx=db.transaction('messages','readonly');
       var store=tx.objectStore('messages');
       var msgs=await new Promise(function(res,rej){
         var req=store.get(convId);
         req.onsuccess=function(){res(req.result);};
         req.onerror=function(){rej(req.error);};
-      });
+      });if(currentConversationId!==convId)return;
       if(!targetState._container){
         targetState._container=document.createElement('div');
         targetState._container.className='messages-list';
@@ -20105,8 +20115,7 @@ async function switchConversation(convId,forceSwitch){
       _renderBubbleBranchNavs();
       setStatus('idle');
     }catch(e){debugLogger.warn('切换会话失败: '+e.message);}
-    renderConversationList();
-    updateSendButton();
+    if(currentConversationId===convId){renderConversationList();updateSendButton();}
   }
   _streamTargetConvId=_savedStreamTarget;
 }
@@ -20220,7 +20229,7 @@ function renderConversationList(){
     _si.style.cssText='display:block;width:calc(100% - 24px);margin:8px 12px 4px;padding:6px 10px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;outline:none';
     _si.addEventListener('input',function(){_filterConversationList(this.value);});
     var _sb=document.getElementById('conversationSidebar');
-    if(_sb&&_sb.firstChild)_sb.insertBefore(_si,_sb.firstChild.nextSibling);
+    if(_sb){var _hdr=_sb.querySelector('.sidebar-header');if(_hdr&&_hdr.nextSibling)_sb.insertBefore(_si,_hdr.nextSibling);else _sb.appendChild(_si);}
   }
   var entries=conversationDB.entries||[];
   entries.sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
@@ -20233,12 +20242,12 @@ function renderConversationList(){
     var e=entries[ei];
     var isActive=e.id===currentConversationId;
     var div=document.createElement('div');
+    div.setAttribute('data-conv-id',e.id);
     var bgCs=_ensureConvState(e.id);
     var isBgProcessing=bgCs&&bgCs.isProcessing;
     div.className='conversation-item'+(isActive?' active':'')+(isBgProcessing?' bg-processing':'');
-    var statusBadge=isBgProcessing?' ':'';
-    div.innerHTML='<span class="conv-title">'+(e.title||'未命名对话').replace(/</g,'&lt;')+statusBadge+'</span><span class="conv-time">'+formatTime(e.createdAt)+'</span><button class="conv-delete-btn" data-id="'+e.id+'">删除</button>';
-    div.addEventListener('click',function(id){return function(ev){if(ev.target.classList.contains('conv-delete-btn'))return;if(id===currentConversationId){closeSidebar();return;}switchConversation(id).then(function(){closeSidebar();});};}(e.id));
+    div.innerHTML='<span class="conv-title">'+(e.title||'未命名对话').replace(/</g,'&lt;')+'</span><span class="conv-time">'+formatTime(e.createdAt)+'</span><button class="conv-delete-btn" data-id="'+e.id+'">删除</button>';
+    div.addEventListener('click',function(id){return function(ev){if(ev.target.classList.contains('conv-delete-btn'))return;if(id===currentConversationId){closeSidebar();return;}var _l=document.getElementById('conversationList');var _as=_l.querySelectorAll('.conversation-item.active');for(var _ai=0;_ai<_as.length;_ai++)_as[_ai].classList.remove('active');ev.currentTarget.classList.add('active');switchConversation(id).then(function(){closeSidebar();});};}(e.id));
     list.appendChild(div);
   }
   var delBtns=list.querySelectorAll('.conv-delete-btn');
@@ -20328,13 +20337,13 @@ function _renderFilteredConversations(entries,q){
   for(var ei=0;ei<entries.length;ei++){
     var e=entries[ei],isActive=e.id===currentConversationId;
     var div=document.createElement('div');
+    div.setAttribute('data-conv-id',e.id);
     var bgCs=_ensureConvState(e.id);var isBgProcessing=bgCs&&bgCs.isProcessing;
     div.className='conversation-item'+(isActive?' active':'')+(isBgProcessing?' bg-processing':'');
-    var statusBadge=isBgProcessing?' ':'';
     var title=(e.title||'未命名对话').replace(/</g,'&lt;');
     if(q){var regex=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');title=title.replace(regex,'<mark style="background:#fff3b0;padding:0 2px;border-radius:2px">$1</mark>');}
-    div.innerHTML='<span class="conv-title">'+title+statusBadge+'</span><span class="conv-time">'+formatTime(e.createdAt)+'</span><button class="conv-delete-btn" data-id="'+e.id+'">删除</button>';
-    div.addEventListener('click',function(id){return function(ev){if(ev.target.classList.contains('conv-delete-btn'))return;if(id===currentConversationId){closeSidebar();return;}switchConversation(id).then(function(){closeSidebar();});};}(e.id));
+    div.innerHTML='<span class="conv-title">'+title+'</span><span class="conv-time">'+formatTime(e.createdAt)+'</span><button class="conv-delete-btn" data-id="'+e.id+'">删除</button>';
+    div.addEventListener('click',function(id){return function(ev){if(ev.target.classList.contains('conv-delete-btn'))return;if(id===currentConversationId){closeSidebar();return;}var _l=document.getElementById('conversationList');var _as=_l.querySelectorAll('.conversation-item.active');for(var _ai=0;_ai<_as.length;_ai++)_as[_ai].classList.remove('active');ev.currentTarget.classList.add('active');switchConversation(id).then(function(){closeSidebar();});};}(e.id));
     list.appendChild(div);
   }
   var delBtns=list.querySelectorAll('.conv-delete-btn');
@@ -20452,7 +20461,7 @@ processUserMessage=async function(userText,taskId){
   // 【多对话并行】完成时保存
   var cs1=_ensureConvState(currentConversationId);
   if(cs1){
-    cs1.isProcessing=false;
+    isProcessing=false;
   }
   if(currentConversationId){
     setTimeout(function(){saveCurrentMessages();},800);
