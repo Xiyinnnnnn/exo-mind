@@ -1956,8 +1956,8 @@ var TOOL_REGISTRY={
     parameters:{type:'object',properties:{headers:{type:'array',items:{type:'string'}},rows:{type:'array',items:{type:'array',items:{type:'string'}}},download_format:{type:'string',enum:['csv','xlsx',null]}},required:['headers','rows']}},
   'word_generator':{name:'word_generator',description:'生成Word(.docx)。content用Markdown。',executor:'main_thread',
     parameters:{type:'object',properties:{title:{type:'string'},content:{type:'string',description:'Markdown'},filename:{type:'string',description:'不含扩展名'}},required:['title','content']}},
-  'fuzzy_search':{name:'fuzzy_search',description:'模糊搜索定位。mode:filename(搜文件名)/content(搜文件内部内容,Fuse.js+行号)。用filesystem read按行号精读。',executor:'task_worker',
-    parameters:{type:'object',properties:{mode:{type:'string',enum:['filename','content'],description:'必选。filename=搜文件名 | content=搜文件内部内容'},query:{type:'string',description:'搜索关键词'},file:{type:'string',description:'mode=content时必传。要搜索的文件完整路径'},path:{type:'string',default:'/',description:'mode=filename时限定目录前缀'},limit:{type:'number',default:10,description:'返回条数默认10'}},required:['query','mode']}},
+  'fuzzy_search':{name:'fuzzy_search',description:'深度模糊搜索(递归全目录)。mode:filename(全路径匹配文件名)/content(全文件grep内容,Fuse.js+行号)。用filesystem read按行号精读。',executor:'task_worker',
+    parameters:{type:'object',properties:{mode:{type:'string',enum:['filename','content'],description:'必选。filename=全路径深度搜文件名 | content=全文件grep搜内容'},query:{type:'string',description:'搜索关键词。以.开头=精确扩展名匹配'},file:{type:'string',description:'mode=content时可选。限定文件路径(支持部分匹配)；不传则全量grep所有文件'},path:{type:'string',description:'可选。限定搜索目录前缀。filename/content均可用于缩小范围'},limit:{type:'number',default:10,description:'返回条数默认10'}},required:['query','mode']}},
   'mcts_plan':{name:'mcts_plan',description:'MCTS多步规划。mode:fast(150sims)/standard(600sims,thinking)。',executor:'main_thread',
     parameters:{type:'object',properties:{problem:{type:'string'},goal:{type:'string'},constraints:{type:'string'},mode:{type:'string',enum:['fast','standard'],default:'fast'}},required:['problem','goal']}},
   'read_image':{name:'read_image',description:'读图。将已上传图片发送给模型进行视觉理解。',executor:'main_thread',
@@ -2157,8 +2157,8 @@ chart / diagram / svg_animator / table_generator / word_generator / mcts_plan / 
 | copy | 复制文件 | path, new_path, overwrite |
 | code_run | 执行代码(可读写文件系统) | path(.js或.py), timeout(默认10s), sandbox_dir |
 
-### read 读取策略（推荐流程：fuzzy_search定位 → chunked按行号精读 → 必要时full全文）
-- **chunked**: 按行号分块精读, 需 line/maxLines, 带行号。fuzzy_search返回行号后据此读取
+### read 读取策略（推荐流程：fuzzy_search mode="content" 全量grep定位 → chunked按行号精读 → 必要时full全文）
+- **chunked**: 按行号分块精读, 需 line/maxLines, 带行号。fuzzy_search mode="content"(不传file则grep全量)返回行号后据此读取
 - **auto**(默认): 小文件全量返回; 传line/endLine时自动切换chunked
 - **full**: 强制全量, 受 full_max_bytes 限制(默认2MB)。仅在确需通读全文时使用
 
@@ -2443,39 +2443,29 @@ SVG会被安全检查，禁止: on*事件、<script>、javascript:、<foreignObj
 
   'fuzzy_search':`## fuzzy_search — 模糊搜索
 
-★ mode 区分两种模式：
+★ 深度递归搜索全目录（无path限制）。mode区分两种模式：
 
 | mode | 用途 | 必传字段 | 返回 |
 |------|------|----------|------|
-| filename | 搜文件名 | query + path | 匹配的文件路径列表 |
-| content | 搜文件内部内容 | query + file | 行号+匹配片段+相关性评分 |
+| filename | 搜文件名(全路径匹配) | query | 匹配的文件路径列表 |
+| content | grep搜全文件内容 | query (+ file可选) | 行号+匹配片段+相关性评分 |
 
 ### 参数
 - **mode** (必选): "filename" 或 "content"
-- **query** (必填): 搜索关键词
-- **file**: mode=content 时必传。文件完整路径
-- **path**: mode=filename 时的目录前缀，默认 /
+- **query** (必填): 搜索关键词。filename模式匹配全路径(含目录+文件名+扩展名)；content模式grep全文件内容
+- **file**: mode=content 时可选的限定条件。传入则只搜该文件(支持部分路径匹配)，不传则grep全量所有文件
 - **limit**: 返回条数，默认10
 
 ### 最小示例
-`+…`+`fuzzy_search mode="filename" query="index" path="/uploads"`+…`+`
-`+…`+`fuzzy_search mode="content" query="数据库" file="/uploads/doc.md"`+…`+`
-`+…`+`fuzzy_search mode="content" query="API" file="/uploads/api.js" limit=5`+…`+`
+`+"`"+`fuzzy_search mode="filename" query="index"`+"`"+` → 递归搜全目录含"index"的文件
+`+"`"+`fuzzy_search mode="filename" query=".js"`+"`"+` → 搜所有JS文件(全路径匹配)
+`+"`"+`fuzzy_search mode="content" query="数据库"`+"`"+` → grep全量文件内容含"数据库"的行
+`+"`"+`fuzzy_search mode="content" query="API" file="/uploads/api"`+"`"+` → 限定搜api相关文件
 
 ### 注意事项
-- filename → 返回文件路径列表，下一步用 filesystem read 精读
-- content → 返回 {path, score, line, snippet}，下一步按行号精读
+- filename → 全路径深度匹配(不再是浅层前缀)，返回文件路径列表，下一步用 filesystem read 精读
+- content → 不传file时grep全量所有文件；传file限定范围。返回 {path, score, line, snippet}，下一步按行号精读
 - 原则：fuzzy_search 定位 → read 精读 → 必要时才 full 全文`,
-
-
-### 最小示例
-`+"`"+`fuzzy_search query="index" path="/uploads"`+"`"+` (搜文件名)
-`+"`"+`fuzzy_search query="数据库" file="/uploads/doc.md"`+"`"+` (搜文件内容+行号)
-`+"`"+`fuzzy_search query="API" file="/uploads/api.js" limit=5`+"`"+`
-### 注意事项
-- 文件名模式：返回匹配文件路径。下一步用 filesystem read <路径> 按行号精读
-- 内容模式：返回文件路径+相关性评分+行号+匹配片段。下一步按行号精读
-- 原则：先模糊搜索定位 → 按行号精读 → 必要时才全文。避免无谓全量读取`,
 
   'mcts_plan':`## mcts_plan — MCTS推理规划
 多步推理规划引擎。使用蒙特卡洛树搜索(MCTS)探索决策路径并评估。
@@ -6561,9 +6551,10 @@ function setStatus(status){
   if(!dot)return;
   dot.className='status-dot '+status;
   switch(status){
-    case 'idle':dot.title='系统就绪';break;
-    case 'processing':dot.title='处理中...';break;
-    case 'error':dot.title='错误';break;
+    case 'idle':dot.title='系统就绪';document.title='🟢 Exo';break;
+    case 'processing':dot.title='处理中...';document.title='🟡 Exo';break;
+    case 'error':dot.title='错误';document.title='🔴 Exo';break;
+    case 'flow':dot.title='心流模式';document.title='🟣 Exo';break;
   }
 }
 
@@ -7654,10 +7645,11 @@ src+='  }\n';
   src+='    await loadScript("fuse",["https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js","https://unpkg.com/fuse.js@7.0.0/dist/fuse.min.js"],"Fuse");\n';
   src+='    if(typeof Fuse==="undefined")return [];\n';
   src+='    // ★ 内容搜索模式(仅file模式调用,文件名搜索在主线程完成)\n';
-  src+='    var th=query.length<=2?0.8:query.length<=4?0.6:0.4;\n';
-  src+='    var fuse=new Fuse(files,{keys:["content"],threshold:th,includeScore:true,includeMatches:true,minMatchCharLength:1});\n';
+  src+='    // ★ 短词严格阈值限制误报, ignoreLocation 全程 true 避免深位匹配被位置惩罚\n';
+  src+='    var th=query.length<=2?0.0:query.length<=3?0.08:query.length<=4?0.12:query.length<=6?0.14:0.18;\n';
+  src+='    var fuse=new Fuse(files,{keys:["content"],threshold:th,includeScore:true,includeMatches:true,minMatchCharLength:Math.min(query.length,4),ignoreLocation:true,distance:100});\n';
   src+='    var results=fuse.search(query).slice(0,limit);\n';
-  src+='    return results.map(function(r){var c=r.item.content||"";var ln=1;if(r.matches&&r.matches[0]&&r.matches[0].indices&&r.matches[0].indices[0]){ln=c.substring(0,r.matches[0].indices[0][0]).split("\\n").length;}return {file:r.item.name,path:r.item.path,score:Math.round(r.score*100)/100,line:ln,snippet:c.substring(0,200)+"..."}});\n';
+  src+='    return results.map(function(r){return {file:r.item.name,path:r.item.path,score:Math.round(r.score*100)/100,line:r.item._line||1,snippet:(r.item.content||"").substring(0,300)}});\n';
   src+='  }catch(e){self.postMessage({type:"log",payload:{level:"warn",message:"[任务Worker] fuzzy_search 执行失败: "+e.message}});return [{file:"(搜索错误)",path:"",score:0,line:1,snippet:"fuzzy_search 内部错误: "+e.message}]}\n';
   src+='}\n';
   src+='\n';
@@ -10533,34 +10525,42 @@ async function toolWordGenerator(args){
 }
 
 async function toolFuzzySearch(args){
-  var query=args.query,path=args.path?normalizePath(args.path):'/',limit=args.limit||10,targetFile=args.file?normalizePath(args.file):null;
+  var mode=args.mode,query=args.query,limit=args.limit||10,targetFile=args.file?normalizePath(args.file):null,searchPath=args.path?normalizePath(args.path):null;
   if(!query||!query.trim())throw new Error('搜索关键词不能为空');
+  if(!mode)throw new Error('mode 必填，可选值: filename | content');
   var files=await idbTransaction('files','readonly',function(store){return store.getAll();});
 
-  // ★ 文件名搜索模式：仅path无file → 搜该路径下文件名(不走Fuse.js)
-  if(!targetFile){
+  // ★ 文件名搜索模式：mode=filename → 深度递归搜全路径(不走Fuse.js)
+  if(mode==='filename'){
     var nameMatches=[];
+    var isExt=query.charAt(0)==='.';
     for(var i=0;i<files.length;i++){
       var _f=files[i];
-      if(!_f.path||_f.path.indexOf(path)!==0)continue;
-      var fn=_f.path.split('/').pop()||_f.path;
-      if(fn.toLowerCase().indexOf(query.toLowerCase())!==-1){
-        nameMatches.push({path:_f.path,name:fn});
+      if(!_f.path)continue;
+      var ql=query.toLowerCase(),pl=_f.path.toLowerCase();
+      if(isExt){
+        var extIdx=pl.lastIndexOf('.');
+        if(extIdx!==-1&&pl.substring(extIdx)===ql)nameMatches.push({path:_f.path,name:_f.path.split('/').pop()||_f.path});
+      }else{
+        if(pl.indexOf(ql)!==-1)nameMatches.push({path:_f.path,name:_f.path.split('/').pop()||_f.path});
       }
     }
-    if(nameMatches.length===0)return '在 '+path+' 路径下未找到文件名匹配 "'+query+'" 的文件。请先用 filesystem list '+path+' 查看目录内容。';
+    if(nameMatches.length===0)return '全目录递归搜索未找到路径匹配 "'+query+'" 的文件。请先用 filesystem list / 查看目录结构。';
     var shown=nameMatches.slice(0,limit);
-    return '文件名搜索结果 ('+nameMatches.length+' 条，显示前 '+shown.length+' 条):\n'+shown.map(function(m,i){return (i+1)+'. **'+m.path+'**';}).join('\n')+'\n\n 用 filesystem read <路径> 按行号精读。若需搜文件内容，传 file 参数。';
+    return '文件名搜索结果 ('+nameMatches.length+' 条，显示前 '+shown.length+' 条):\n'+shown.map(function(m,i){return (i+1)+'. **'+m.path+'**';}).join('\n')+'\n\n⚠️ 以上仅为文件名匹配，非文件内部内容！\n 用 filesystem read <路径> 精读文件。\n ★要搜文件内部内容，请用 fuzzy_search mode="content" query="'+query+'"';
   }
 
-  // ★ 文件内容搜索模式：有file → 搜该文件内容(Fuse.js)
+  // ★ 文件内容搜索模式：mode=content → grep全量文件或限定文件(Fuse.js)
   var fileContents=[];
   for(var i=0;i<files.length;i++){
     var f=files[i];
-    if(!f.content||f.content==='__DIR__')continue;
-    if(f.path!==targetFile){
-      var _fn=f.path.split('/').pop(),_tn=targetFile.split('/').pop();
-      if(_fn!==_tn&&f.path.indexOf(targetFile)===-1&&targetFile.indexOf(f.path)===-1)continue;
+    if(!f.content||f.content=='__DIR__')continue;
+    if(searchPath&&f.path.indexOf(searchPath)!==0)continue;
+    if(targetFile){
+      if(f.path!==targetFile){
+        var _fn=f.path.split('/').pop(),_tn=targetFile.split('/').pop();
+        if(_fn!==_tn&&f.path.indexOf(targetFile)===-1&&targetFile.indexOf(f.path)===-1)continue;
+      }
     }
     var content=f.content;
     if(f.compressed){
@@ -10570,31 +10570,24 @@ async function toolFuzzySearch(args){
       if(content instanceof Blob)continue;
       content=String(content||'');
     }
-    var MAX_CHUNK=120000;
-    if(content.length>MAX_CHUNK){
-      var overlap=2000;
-      for(var pos=0;pos<content.length;pos+=MAX_CHUNK-overlap){
-        var chunk=content.substring(pos,pos+MAX_CHUNK);
-        var chunkName=f.path.split('/').pop()||f.path;
-        fileContents.push({
-          name:chunkName+' [段'+(Math.floor(pos/(MAX_CHUNK-overlap))+1)+']',
-          path:f.path,
-          content:chunk
-        });
-        if(pos+MAX_CHUNK>=content.length)break;
-      }
-    }else{
-      var snippet=content.substring(0,MAX_CHUNK);
-      fileContents.push({name:f.path.split('/').pop()||f.path,path:f.path,content:snippet});
+    var lines=content.split('\n');
+    for(var li=0;li<lines.length;li++){
+      fileContents.push({
+        name:f.path.split('/').pop()||f.path,
+        path:f.path,
+        content:lines[li],
+        _line:li+1
+      });
     }
   }
-  if(fileContents.length===0)return '在文件 '+targetFile+' 中没有找到可搜索的内容（文件不存在或路径不匹配）。请先用 filesystem list 查看目录内容。';
+  if(fileContents.length===0)return '未找到可搜索的文件内容'+(targetFile?'（文件 '+targetFile+' 不存在或路径不匹配）':'（文件系统为空或无可读文本文件）')+'。请先用 filesystem list 查看目录内容。';
   var resp=await sendToTaskWorker('fuzzy_search',{query:query,files:fileContents,limit:limit});
   if(!resp||!resp.success||!resp.data)return '搜索未返回结果。';
   var results=resp.data;
-  if(results.length===0)return '未找到匹配 "'+query+'" 的文件。';
-  var header='在文件 '+targetFile+' 中搜索结果 ('+results.length+' 条):\n';
-  return header+results.map(function(r,i){return (i+1)+'. **'+r.path+'** — 相关性: '+r.score+' | 行号≈'+r.line+'\n   > '+r.snippet;}).join('\n')+'\n\n 用 filesystem read <路径> line=<行号> 按行号精读。';
+  if(results.length===0)return '未找到匹配 "'+query+'" 的内容。';
+  var scopeLabel=targetFile?'在文件 '+targetFile+' 中':'全量文件grep';
+  var header=scopeLabel+'搜索结果 ('+results.length+' 条):\n';
+  return header+results.map(function(r,i){return (i+1)+'. **'+r.path+'** — 相关性: '+r.score+' | 行号 '+r.line+'\n   > '+r.snippet;}).join('\n')+'\n\n 用 filesystem read <路径> line=<行号> 按行号精读。';
 }
 
 // ================================================================
@@ -17532,6 +17525,7 @@ function _updateFlowProgressDot(session){
     dot.title='心流 · 第'+session.iteration+'轮 · '+(session.bestScore*100).toFixed(0)+'%';
     dot.style.background='#9c27b0';
     dot.style.animation='pulse 1s infinite';
+    document.title='🟣 Exo · 第'+session.iteration+'轮';
   }
 }
 
