@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <title>Exo</title>
 <style>
 /* ===== CSS变量 ===== */
@@ -141,7 +141,7 @@ body{
   display: flex; align-items: center; gap: 4px;
   margin-top: 4px; padding: 2px 6px;
   font-size: 11px; color: var(--color-text-secondary);
-  user-select: none;
+  -webkit-user-select:none;user-select:none;
 }
 .bubble-branch-nav button {
   width: 22px; height: 22px; border-radius: 50%;
@@ -219,12 +219,12 @@ body{
 .thinking-indicator .dots span:nth-child(3){animation-delay:.4s}
 @keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
 /* 思考过程展开/收起 */
-.thinking-toggle{cursor:pointer;color:var(--color-text-secondary);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:4px;user-select:none}
+.thinking-toggle{cursor:pointer;color:var(--color-text-secondary);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:4px;-webkit-user-select:none;user-select:none}
 .thinking-toggle:hover{color:var(--color-primary)}
 .thinking-block{border-left:3px solid var(--color-primary);padding:8px 12px;margin:6px 0;font-size:12px;color:var(--color-text-secondary);background:rgba(79,110,247,0.04);border-radius:0 var(--radius-sm) var(--radius-sm) 0;max-height:300px;overflow-y:auto;white-space:pre-wrap;line-height:1.5;word-break:break-word}
 .thinking-block.collapsed{display:none}
 /* 工具结果折叠/展开 */
-.tool-result-toggle{cursor:pointer;color:var(--color-text-secondary);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:4px;user-select:none}
+.tool-result-toggle{cursor:pointer;color:var(--color-text-secondary);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:4px;-webkit-user-select:none;user-select:none}
 .tool-result-toggle:hover{color:#ff9800}
 .tool-result-block{border-left:3px solid #ff9800;padding:8px 12px;margin:6px 0;font-size:12px;color:var(--color-text-secondary);background:rgba(255,152,0,0.04);border-radius:0 var(--radius-sm) var(--radius-sm) 0;max-height:300px;overflow-y:auto;white-space:pre-wrap;line-height:1.5;word-break:break-word}
 .tool-result-block.collapsed{display:none}
@@ -408,7 +408,7 @@ input:checked+.toggle-slider::before{transform:translateX(22px)}
 /* ===== 可折叠设置面板 ===== */
 .settings-section.collapsible .section-header{
   cursor:pointer;display:flex;justify-content:space-between;align-items:center;
-  user-select:none;transition:background .15s;
+  -webkit-user-select:none;user-select:none;transition:background .15s;
   padding:10px 12px;margin:0 -12px 8px -12px;border-radius:var(--radius-sm);
 }
 .settings-section.collapsible .section-header:hover{background:#f0f4ff}
@@ -435,7 +435,7 @@ input:checked+.toggle-slider::before{transform:translateX(22px)}
 .file-policy-list{display:flex;flex-direction:column;gap:6px}
 .file-policy-empty{text-align:center;padding:20px;color:#999;font-size:13px}
 .file-policy-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-.file-policy-tag{padding:4px 10px;border-radius:14px;font-size:12px;border:1px solid var(--color-border);background:#fff;cursor:pointer;transition:all .2s;user-select:none;white-space:nowrap}
+.file-policy-tag{padding:4px 10px;border-radius:14px;font-size:12px;border:1px solid var(--color-border);background:#fff;cursor:pointer;transition:all .2s;-webkit-user-select:none;user-select:none;white-space:nowrap}
 .file-policy-tag:hover{background:#f0f4ff}
 .file-policy-tag.active{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
 .file-policy-tag .count{margin-left:3px;opacity:.7;font-size:11px}
@@ -480,7 +480,7 @@ input:checked+.toggle-slider::before{transform:translateX(22px)}
 }
 .debug-header{
   padding:4px 12px;cursor:pointer;display:flex;
-  justify-content:space-between;background:#2d2d2d;user-select:none;
+  justify-content:space-between;background:#2d2d2d;-webkit-user-select:none;user-select:none;
 }
 .debug-content{max-height:150px;overflow-y:auto;padding:8px 12px}
 .log-entry{display:flex;gap:8px;padding:2px 0;font-size:11px}
@@ -624,7 +624,7 @@ button,label,[role="button"],.file-upload-btn{
 <body>
 
 <!-- ===== 会话侧边栏 ===== -->
-<div class="conversation-sidebar" id="conversationSidebar" aria-hidden="true">
+<div class="conversation-sidebar" id="conversationSidebar" aria-hidden="true" inert>
   <div class="sidebar-header">
     <h3> 对话历史</h3>
     <div style="display:flex;gap:4px">
@@ -679,7 +679,7 @@ button,label,[role="button"],.file-upload-btn{
       <button class="file-upload-btn" id="btnFileUpload" title="上传文件" aria-label="上传文件" type="button">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
       </button>
-      <input type="file" id="fileInput" multiple style="position:fixed;top:-10px;left:-10px;width:1px;height:1px;opacity:0.01;z-index:-1" accept=".txt,.md,.json,.csv,.log,.xml,.html,.css,.yaml,.yml,.toml,.ini,.cfg,.env,.sh,.bash,.zsh,.bat,.ps1,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.swift,.kt,.scala,.r,.m,.lua,.sql,.pl,.tex,.pdf,.docx,.xlsx,.xls,.xlsm,.ods,.pptx,.epub,.png,.jpg,.jpeg,.gif,.webp,.bmp">
+      <input type="file" id="fileInput" multiple aria-label="选择文件上传" style="position:fixed;top:-10px;left:-10px;width:1px;height:1px;opacity:0.01;z-index:-1" accept=".txt,.md,.json,.csv,.log,.xml,.html,.css,.yaml,.yml,.toml,.ini,.cfg,.env,.sh,.bash,.zsh,.bat,.ps1,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.rb,.php,.swift,.kt,.scala,.r,.m,.lua,.sql,.pl,.tex,.pdf,.docx,.xlsx,.xls,.xlsm,.ods,.pptx,.epub,.png,.jpg,.jpeg,.gif,.webp,.bmp">
       <button id="btnSend" title="发送消息" aria-label="发送" disabled>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
       </button>
@@ -708,7 +708,7 @@ button,label,[role="button"],.file-upload-btn{
 </style>
 
 <!-- ===== 设置面板 ===== -->
-<aside class="settings-drawer" id="settingsDrawer" aria-hidden="true">
+<aside class="settings-drawer" id="settingsDrawer" aria-hidden="true" inert>
   <div class="drawer-header">
     <h2> 设置</h2>
     <button id="btnCloseSettings" aria-label="关闭设置">&times;</button>
@@ -847,7 +847,7 @@ button,label,[role="button"],.file-upload-btn{
           <input type="text" id="skillEditName" placeholder="技能名称（必填）">
           <input type="text" id="skillEditTrigger" placeholder="触发词，如 /分析 或 帮我分析">
           <textarea id="skillEditPrompt" placeholder="prompt_fragment 提示片段（必填）"></textarea>
-          <select id="skillEditCategory">
+          <select id="skillEditCategory" aria-label="技能分类">
             <option value="工具增强">工具增强</option>
             <option value="对话风格">对话风格</option>
             <option value="领域知识">领域知识</option>
@@ -910,7 +910,7 @@ button,label,[role="button"],.file-upload-btn{
         <div class="kb-add-form" id="kbAddForm" style="display:none">
           <input type="text" id="kbEntryTitle" placeholder="标题（必填）">
           <textarea id="kbEntryContent" placeholder="内容（必填）"></textarea>
-          <select id="kbEntryCategory">
+          <select id="kbEntryCategory" aria-label="知识条目分类">
             <option value="技术参考">技术参考</option>
             <option value="项目文档">项目文档</option>
             <option value="个人笔记">个人笔记</option>
@@ -934,7 +934,7 @@ button,label,[role="button"],.file-upload-btn{
         <div id="memEntriesList" style="max-height:240px;overflow-y:auto;margin-bottom:8px"><em style="color:#999;font-size:12px">暂无记忆条目</em></div>
         <div class="kb-add-form" id="memAddForm" style="display:none">
           <textarea id="memEntryText" placeholder="事实内容（必填）" style="min-height:80px;max-height:50vh;resize:vertical"></textarea>
-          <select id="memEntryCategory">
+          <select id="memEntryCategory" aria-label="记忆条目分类">
             <option value="技术参考">技术参考</option>
             <option value="项目文档">项目文档</option>
             <option value="个人笔记">个人笔记</option>
@@ -1081,10 +1081,10 @@ button,label,[role="button"],.file-upload-btn{
         <!-- SQL开关 -->
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用 SQL 数据库</span><label class="toggle-switch"><input type="checkbox" id="settingSqlEnabled"><span class="toggle-slider"></span></label></label><div class="help-text">关闭后agent无法使用 sql_db 工具（基于SQLite WASM）</div></div>
         <!-- 语音开关 -->
-        <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用语音工具</span><label class="toggle-switch"><input type="checkbox" id="settingSpeechEnabled"><span class="toggle-slider"></span></label></label><div class="help-text">关闭后 speech_tts / speech_stt 全部禁用</div></div>
+        <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用语音工具</span><label class="toggle-switch"><input type="checkbox" id="settingSpeechEnabled"><span class="toggle-slider"></span></label></label><div class="help-text">关闭后 speech_tts / speech_stt 全部禁用。<br><b>⚠ Android WebView 限制：</b>Web Speech API 在 Android WebView 中不可用，需通过 App 的 JavaScript Bridge 调用原生 SpeechRecognizer / TextToSpeech。纯Chrome浏览器可正常使用。</div></div>
         <div class="settings-field"><button class="btn btn-outline btn-sm" id="btnTestTTS" style="width:100%"> 测试TTS(朗读"你好")</button></div>
         <div class="settings-field"><button class="btn btn-outline btn-sm" id="btnListVoices" style="width:100%"> 列出可用语音</button><div class="help-text" id="voiceListStatus" style="margin-top:4px;font-size:11px"></div></div>
-        <div class="settings-field"><label for="settingSttEndpoint">STT API 端点(可选)</label><input type="text" id="settingSttEndpoint" placeholder="留空=使用浏览器内置识别"></div>
+        <div class="settings-field"><label for="settingSttEndpoint">STT API 端点(可选)</label><input type="text" id="settingSttEndpoint" placeholder="例: http://192.168.1.5:8080/v1/audio/transcriptions (Whisper)"><div class="help-text">填入后，Android等不支持内置识别的浏览器将通过录音→上传端点完成识别。支持任何兼容OpenAI Whisper格式的STT服务。</div></div>
         <!-- 日历开关 -->
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span> 启用日历工具</span><label class="toggle-switch"><input type="checkbox" id="settingCalendarEnabled" checked><span class="toggle-slider"></span></label></label><div class="help-text">关闭后 agent 无法使用 calendar 工具管理事件</div></div>
         <!-- 日历定时唤醒 -->
@@ -1114,14 +1114,14 @@ button,label,[role="button"],.file-upload-btn{
   <div class="debug-header" id="debugToggle"><span> 调试日志</span><span class="log-count" id="logCount">0</span></div>
   <div class="debug-content" id="debugContent" hidden>
     <div class="log-entries" id="logEntries"></div>
-    <div class="log-controls"><button id="btnClearLogs">清空</button><select id="logLevel"><option value="all">全部</option><option value="debug">调试</option><option value="info">信息</option><option value="warn">警告</option><option value="error">错误</option></select></div>
+    <div class="log-controls"><button id="btnClearLogs">清空</button><select id="logLevel" aria-label="日志级别"><option value="all">全部</option><option value="debug">调试</option><option value="info">信息</option><option value="warn">警告</option><option value="error">错误</option></select></div>
   </div>
 </footer>
 
 <!-- ===== 遮罩层 ===== -->
 <div class="overlay" id="overlay" style="display:none"></div>
 <div class="toast-container" id="toastContainer"></div>
-<input type="file" id="hiddenFileImport" hidden accept=".json">
+<input type="file" id="hiddenFileImport" hidden accept=".json" aria-label="导入JSON备份文件">
 
 <!-- ============================================================ -->
 <!-- ===== 【V4重构】完整JavaScript - Base64 Worker 消除转义 ===== -->
@@ -3102,7 +3102,7 @@ var EXTERNAL_LIBRARIES={
   'tesseract':{urls:['https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js','https://unpkg.com/tesseract.js@5/dist/tesseract.min.js','https://cdn.jsdelivr.net/npm/tesseract.js@5.1.5/dist/tesseract.min.js'],global:'Tesseract',required:false,loadOnStart:false,
     workerUrls:['https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js','https://unpkg.com/tesseract.js@5/dist/worker.min.js']},
   'sqljs':{urls:['https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.min.js','https://unpkg.com/sql.js@1.10.3/dist/sql-wasm.min.js','https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.min.js'],global:'initSqlJs',required:false,loadOnStart:false},
-  'mespeak':{urls:['https://www.masswerk.at/mespeak/mespeak.full.js','https://cdn.jsdelivr.net/gh/masswerk/mespeak@2.0.5/lib/mespeak.full.min.js','https://unpkg.com/mespeak@2.0.5/lib/mespeak.full.min.js'],global:'meSpeak',required:false,loadOnStart:false},
+  'mespeak':{urls:['https://cdn.jsdelivr.net/gh/btopro/mespeak@master/mespeak.full.js','https://www.masswerk.at/mespeak/mespeak.full.js','https://cdn.jsdelivr.net/gh/btopro/mespeak@master/mespeak.full.js'],global:'meSpeak',required:false,loadOnStart:false},
   'html2pdf':{urls:['https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js','https://unpkg.com/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js','https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js'],global:'html2pdf',required:false,loadOnStart:false}
 };
 
@@ -3686,7 +3686,9 @@ var settings={
   calendar_wake_prompt:'',
   calendar_wake_interval:30,
   stt_endpoint:'',
+  vis_network_enabled:true,
   world_validator_enabled:true,
+  pdf_enabled:true,
   pipeline_enabled:true
 };
 var budgetUsed=0;
@@ -4349,7 +4351,7 @@ function showExportDialog(){
     dialog.className='modal-dialog';
     dialog.innerHTML='<h3>导出数据</h3>'
       +'<p style="margin-bottom:12px;font-size:14px;color:var(--color-text-secondary)">将导出全部对话历史、文件、设置。</p>'
-      +'<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;user-select:none;padding:10px 14px;background:#fff3cd;border-radius:8px;margin-bottom:16px">'
+      +'<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;-webkit-user-select:none;user-select:none;padding:10px 14px;background:#fff3cd;border-radius:8px;margin-bottom:16px">'
       +'<input type="checkbox" id="exportIncludeKeys" style="width:18px;height:18px;cursor:pointer;accent-color:var(--color-primary)">'
       +'<span><strong>包含 API Key</strong><br><small style="color:#856404">导出文件将包含 DeepSeek Key、Tavily Key、SMTP 凭据等敏感信息。请妥善保管导出文件。</small></span>'
       +'</label>'
@@ -4582,11 +4584,16 @@ async function createFile(path,content){
   debugLogger.debug('文件创建: '+np);
 }
 
+var _accessedThrottle={};
 async function readFile(path){
   var np=normalizePath(path);
   var record=await idbTransaction('files','readonly',function(store){return store.get(np);});
   if(!record)return null;
-  await idbTransaction('files','readwrite',function(store){record.accessed_at=Date.now();return store.put(record);});
+  var now=Date.now();
+  if(!_accessedThrottle[np]||now-_accessedThrottle[np]>60000){
+    _accessedThrottle[np]=now;
+    idbTransaction('files','readwrite',function(store){record.accessed_at=now;return store.put(record);}).catch(function(){});
+  }
   if(record.compressed)return await decompressText(record.content);
   return record.content;
 }
@@ -4941,7 +4948,8 @@ async function saveSettings(){
     archive_enabled:   _read('archive_enabled','settingArchiveEnabled','checked',_bool,true),
     flow_mode_enabled: _read('flow_mode_enabled','settingFlowModeEnabled','checked',_bool,true),
     vis_network_enabled: _read('vis_network_enabled','settingVisNetworkEnabled','checked',_bool,true),
-    world_validator_enabled: _read('world_validator_enabled','settingWorldValidatorEnabled','checked',_bool,true)
+    world_validator_enabled: _read('world_validator_enabled','settingWorldValidatorEnabled','checked',_bool,true),
+    pdf_enabled: _read('pdf_enabled','settingPdfEnabled','checked',_bool,true)
   };
   // ★ 自动比例默认值：读取旧文件中的 daily_token_limit（oldDaily），
   //   若派生字段仍等于「旧硬编码默认值」或「oldDaily 的比例值 → 说明从未被用户手动修改 → 自动更新
@@ -4977,6 +4985,7 @@ async function saveSettings(){
   TOOL_REGISTRY['convert_format'].disabled=!newSettings.convert_enabled;
   TOOL_REGISTRY['archive'].disabled=!newSettings.archive_enabled;
   TOOL_REGISTRY['flow_mode'].disabled=!newSettings.flow_mode_enabled;
+  TOOL_REGISTRY['send_email'].disabled=!newSettings.email_enabled;
   TOOL_REGISTRY['world_validator'].disabled=!newSettings.world_validator_enabled;
   TOOL_REGISTRY['vis_network'].disabled=!newSettings.vis_network_enabled;
   var existing=await readFile('/config/settings.json');
@@ -5060,7 +5069,8 @@ function applySettingsToUI(){
     {el:'settingArchiveEnabled',      key:'archive_enabled',        type:'checked', def:true},
     {el:'settingFlowModeEnabled',     key:'flow_mode_enabled',      type:'checked', def:true},
     {el:'settingVisNetworkEnabled',   key:'vis_network_enabled',    type:'checked', def:true},
-    {el:'settingWorldValidatorEnabled',key:'world_validator_enabled',type:'checked', def:true}
+    {el:'settingWorldValidatorEnabled',key:'world_validator_enabled',type:'checked', def:true},
+    {el:'settingPdfEnabled',          key:'pdf_enabled',            type:'checked', def:true}
   ];
 
   for(var bi=0;bi<BINDINGS.length;bi++){
@@ -5123,6 +5133,7 @@ function applySettingsToUI(){
   TOOL_REGISTRY['convert_format'].disabled=!settings.convert_enabled;
   TOOL_REGISTRY['archive'].disabled=!settings.archive_enabled;
   TOOL_REGISTRY['flow_mode'].disabled=!settings.flow_mode_enabled;
+  TOOL_REGISTRY['send_email'].disabled=!settings.email_enabled;
   TOOL_REGISTRY['vis_network'].disabled=!settings.vis_network_enabled;
   _updateNotifyPermStatus();
   _renderMcpConnections();
@@ -5135,21 +5146,44 @@ function applySettingsToUI(){
     btnTestTTS.addEventListener('click',async function(){
       _ensureAudioContext();
       try{
-        await _ensureMeSpeak();
-        await _meSpeakSpeak({text:'你好',lang:'zh',rate:150,pitch:1,amplitude:100});
-        showToast(' TTS 测试成功 — 应该听到声音了','success');
+        var results=[];
+        // ── 引擎1: 浏览器原生 speechSynthesis（支持汉字直接朗读）──
+        if(window.speechSynthesis){
+          try{
+            var utter=new SpeechSynthesisUtterance('你好世界');
+            utter.lang='zh-CN';utter.rate=0.9;utter.pitch=1;utter.volume=1;
+            await new Promise(function(res,rej){
+              var done=false;
+              var t=setTimeout(function(){done=true;res();},12000);
+              utter.onend=function(){if(!done){done=true;clearTimeout(t);res();}};
+              utter.onerror=function(e){if(!done){done=true;clearTimeout(t);rej(new Error(e.error||'speechSynthesis'));}};
+              window.speechSynthesis.speak(utter);
+            });
+            results.push('[speechSynthesis] "你好世界" => OK');
+          }catch(se){results.push('[speechSynthesis] FAIL: '+se.message);}
+        }else{results.push(' speechSynthesis: 不支持');}
+
+        // ── 引擎2: meSpeak 离线合成（中文仅支持拼音）──
+        try{
+          await _ensureMeSpeak();
+          // 自动转拼音后朗读
+          var pyTest=_hanziToPinyin('你好世界');
+          await _meSpeakSpeak({text:pyTest||'ni3 hao3 shi4 jie4',lang:'zh',rate:150,pitch:1,amplitude:100});
+          results.push('[meSpeak] "'+(pyTest||'ni3 hao3 shi4 jie4')+'" => OK (拼音自动转换)');
+        }catch(me){results.push('[meSpeak] FAIL: '+me.message);}
+
+        showToast('TTS测试:\n'+results.join('\n'),results.some(function(r){return r.indexOf('OK')>=0;})?'success':'warning');
       }catch(e){showToast('TTS测试失败: '+e.message,'warning');}
     });
     var btnListVoices=document.getElementById('btnListVoices');
     if(btnListVoices){
       btnListVoices.addEventListener('click',async function(){
         try{
-          await _ensureMeSpeak();
-          var voices=meSpeak.getDefaultVoice();
+          var result=await toolSpeechTTS({action:'list_voices'});
           var el=document.getElementById('voiceListStatus');
-          if(el)el.textContent='默认语音: '+JSON.stringify(voices)+' | 可用语言: zh(中文) en(英文) ja(日文) ko(韩文)...';
-          showToast('meSpeak已加载,支持50+语言','success');
-        }catch(e){showToast('meSpeak未加载: '+e.message,'warning');}
+          if(el)el.textContent=result.replace(/\n/g,' | ');
+          showToast('语音列表已更新','success');
+        }catch(e){showToast('语音查询失败: '+e.message,'warning');}
       });
     }
   }
@@ -5297,11 +5331,71 @@ var _btnTestTTS_bound=false;
             showToast('未识别到语音，请重试','warning');
           }
         }else{
-          // MediaRecorder 降级
+          // ── MediaRecorder 降级：真正录音 → 上传到 STT 端点 ──
+          var sttEp=settings.stt_endpoint||'';
+          if(!sttEp){
+            showToast('浏览器不支持语音识别，且未配置STT端点。请在设置→语音中填写STT API端点以启用录音降级','warning');
+            return;
+          }
+          if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+            showToast('设备不支持麦克风访问','warning');
+            return;
+          }
           _sttActive=true;
-          showToast('浏览器不支持语音识别，请使用Chrome','warning');
-          _sttActive=false;
-          btnMic.classList.remove('recording');
+          btnMic.classList.add('recording');
+          showToast('正在录音...讲话完成后自动识别','info');
+
+          try{
+            var mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
+            var mt=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':(MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'');
+            var chunks2=[];
+            var rec2;
+            try{rec2=new MediaRecorder(mediaStream,{mimeType:mt||undefined});}catch(e2){rec2=new MediaRecorder(mediaStream);}
+
+            rec2.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks2.push(e.data);};
+
+            var recTimer2=setTimeout(function(){
+              if(rec2.state==='recording')rec2.stop();
+            },maxSeconds*1000);
+
+            rec2.onstop=async function(){
+              clearTimeout(recTimer2);
+              mediaStream.getTracks().forEach(function(t){t.stop();});
+              _sttActive=false;_sttMediaRecorder=null;
+              btnMic.classList.remove('recording');
+              if(!chunks2.length){showToast('未录制到声音','warning');return;}
+              var blob2=new Blob(chunks2,{type:mt||'audio/webm'});
+              showToast('正在识别...','info');
+              try{
+                var fd2=new FormData();fd2.append('audio',blob2,'recording.webm');fd2.append('lang',lang);
+                var resp2=await fetch(sttEp,{method:'POST',body:fd2,signal:AbortSignal.timeout(15000)});
+                if(!resp2.ok){showToast('STT服务返回错误: '+resp2.status,'warning');return;}
+                var result2=await resp2.json();
+                var sttText=result2.text||result2.transcript||'';
+                if(sttText&&sttText.trim()&&inputEl){
+                  inputEl.value=(inputEl.value+' '+sttText.trim()).trim();
+                  inputEl.focus();
+                  inputEl.dispatchEvent(new Event('input',{bubbles:true}));
+                  showToast(' 识别完成','success');
+                }else{showToast('未识别到语音内容','warning');}
+              }catch(e3){showToast('STT请求失败: '+e3.message,'warning');}
+            };
+
+            rec2.onerror=function(e){
+              clearTimeout(recTimer2);
+              mediaStream.getTracks().forEach(function(t){t.stop();});
+              _sttActive=false;_sttMediaRecorder=null;
+              btnMic.classList.remove('recording');
+              showToast('录音设备出错','warning');
+            };
+
+            rec2.start(1000);
+            _sttMediaRecorder=rec2;
+          }catch(e4){
+            _sttActive=false;
+            btnMic.classList.remove('recording');
+            showToast('无法获取麦克风权限: '+e4.message,'warning');
+          }
         }
       });
       
@@ -6091,28 +6185,53 @@ async function _loadScriptWithCache(url,allGlobals,libName){
       blobUrl=URL.createObjectURL(blob);
       debugLogger.info(' '+libName+' 命中本地缓存 → '+url.replace(/https?:\/\/[^/]+\//,''));
     }else{
-      // ── 第2步：从网络 fetch（带超时） ──
+      // ── 第2步：从网络 fetch（带超时），CORS失败则回退到直接<script>标签 ──
       var controller=new AbortController();
       var timeoutId=setTimeout(function(){controller.abort();},15000);
       var response;
+      var corsFailed=false;
       try{
         response=await fetch(url,{mode:'cors',signal:controller.signal});
-      }finally{clearTimeout(timeoutId);}
-      if(!response.ok)throw new Error('HTTP '+response.status);
-      var netBlob=await response.blob();
-      // ── 第3步：存入 Cache（await 确保写入完成） ──
-      if(_cacheStorage){
-        try{
-          await _cacheStorage.put(url,new Response(netBlob.slice(),{
-            status:200,statusText:'OK',
-            headers:{'Content-Type':'application/javascript','Cache-Control':'max-age=31536000,immutable'}
-          }));
-          debugLogger.info(' '+libName+' 已写入本地 → '+url.replace(/https?:\/\/[^/]+\//,''));
-        }catch(e){
-          debugLogger.warn(' '+libName+' 写入失败: '+e.message);
-        }
+      }catch(fetchErr){
+        corsFailed=true;
+        debugLogger.warn(' '+libName+' CORS fetch失败('+fetchErr.message+')，尝试直接<script>标签: '+url.replace(/https?:\/\/[^/]+\//,''));
       }
-      blobUrl=URL.createObjectURL(netBlob);
+      finally{clearTimeout(timeoutId);}
+      if(!corsFailed&&response&&response.ok){
+        var netBlob=await response.blob();
+        // ── 第3步：存入 Cache（await 确保写入完成） ──
+        if(_cacheStorage){
+          try{
+            await _cacheStorage.put(url,new Response(netBlob.slice(),{
+              status:200,statusText:'OK',
+              headers:{'Content-Type':'application/javascript','Cache-Control':'max-age=31536000,immutable'}
+            }));
+            debugLogger.info(' '+libName+' 已写入本地 → '+url.replace(/https?:\/\/[^/]+\//,''));
+          }catch(e){
+            debugLogger.warn(' '+libName+' 写入失败: '+e.message);
+          }
+        }
+        blobUrl=URL.createObjectURL(netBlob);
+      }else if(corsFailed){
+        // ★ 回退：直接 <script src="url"> 注入（绕过CORS，但不经过Cache API）
+        await new Promise(function(res,rej){
+          var script=document.createElement('script');
+          script.src=url;
+          script.onload=function(){
+            if(script.parentNode)script.parentNode.removeChild(script);
+            res();
+          };
+          script.onerror=function(){
+            if(script.parentNode)script.parentNode.removeChild(script);
+            rej(new Error('直接脚本标签加载失败: '+url));
+          };
+          document.head.appendChild(script);
+        });
+        // 直接注入成功 → 不需要 blobUrl，跳过第4步
+        return;
+      }else{
+        throw new Error('HTTP '+(response?response.status:'network error'));
+      }
     }
     // ── 第4步：通过 Blob URL 注入 <script> ──
     await new Promise(function(res,rej){
@@ -6436,22 +6555,28 @@ function buildEvoWorkerSource(){
   src+='var isPaused=false;\n';
   src+='var startupComplete=false;\n';
   src+='var lastReflectionTime=0;\n';
-  src+='var REFLECTION_INTERVAL=5*60*1000;\n';
+  src+='var lastActivityTime=0;\n';
+  src+='var taskOutcomes=[];\n';
+  src+='var MAX_TASK_OUTCOMES=30;\n';
   src+='var pendingRequests={};\n';
   src+='\n';
   
   // === ReflectionScheduler ===
   src+='var reflectionScheduler={\n';
-  src+='  lastReflectionTime:0,minInterval:5*60*1000,failureCount:0,failureThreshold:2,isRunning:false,\n';
-  src+='  shouldReflect:function(currentBudget,reservedBudget,isInterrupted){\n';
+  src+='  lastReflectionTime:0,minInterval:5*60*1000,failureCount:0,failureThreshold:2,isRunning:false,minDataAge:10*60*1000,skillTrustScore:{},\n';
+  src+='  shouldReflect:function(currentBudget,reservedBudget,isInterrupted,lastActivityTime){\n';
   src+='    if(isInterrupted)return false;\n';
   src+='    if(currentBudget<=reservedBudget)return false;\n';
   src+='    if(this.isRunning)return false;\n';
   src+='    var timeSinceLast=Date.now()-this.lastReflectionTime;\n';
+  src+='    var timeSinceActivity=lastActivityTime?Date.now()-lastActivityTime:Infinity;\n';
+  src+='    if(timeSinceActivity>this.minDataAge)return false;\n';
   src+='    if(timeSinceLast>=this.minInterval)return true;\n';
   src+='    if(this.failureCount>=this.failureThreshold)return true;\n';
   src+='    return false;\n';
   src+='  },\n';
+  src+='  getTrust:function(skillId){return this.skillTrustScore[(skillId||"").replace(".json","")]||0;},\n';
+  src+='  adjustTrust:function(skillId,delta){var normalized=(skillId||"").replace(".json","");this.skillTrustScore[normalized]=(this.skillTrustScore[normalized]||0)+delta;if(this.skillTrustScore[normalized]>5)this.skillTrustScore[normalized]=5;if(this.skillTrustScore[normalized]<-3)this.skillTrustScore[normalized]=-3;},\n';
   src+='  recordFailure:function(){this.failureCount++;},\n';
   src+='  recordSuccess:function(){this.failureCount=0;},\n';
   src+='  startReflection:async function(){\n';
@@ -6477,8 +6602,8 @@ function buildEvoWorkerSource(){
   src+='  return new Promise(function(resolve,reject){\n';
   src+='    var id="evo_req_"+Date.now()+"_"+Math.random().toString(36).substr(2,6);\n';
   src+='    var settled=false;\n';
-  src+='    var timeoutMs=600000;\n';
-  src+='    if(type==="proxy_llm_call")timeoutMs=120000;\n';
+  src+='    var timeoutMs=30000;\n';
+  src+='    if(type==="proxy_llm_call")timeoutMs=180000;\n';
   src+='    else if(type==="apply_skill_patch"||type==="discard_test_branch"||type==="rollback")timeoutMs=45000;\n';
   src+='    var timer=setTimeout(function(){\n';
   src+='      if(settled)return;settled=true;delete pendingRequests[id];\n';
@@ -6508,7 +6633,8 @@ function buildEvoWorkerSource(){
   src+='    case "heartbeat":\n';
   src+='      currentBudget=msg.payload.budget_remaining;\n';
   src+='      isInterrupted=msg.payload.interrupt;\n';
-  src+='      if(startupComplete&&reflectionScheduler.shouldReflect(currentBudget,0,isInterrupted)&&!isPaused){\n';
+  src+='      lastActivityTime=msg.payload.last_activity||0;\n';
+  src+='      if(startupComplete&&reflectionScheduler.shouldReflect(currentBudget,0,isInterrupted,lastActivityTime)&&!isPaused){\n';
   src+='        var budgetCheck=getReflectionBudgetLevel();\n';
   src+='        if(budgetCheck!=="insufficient"){\n';
   src+='          await reflectionScheduler.startReflection();\n';
@@ -6528,8 +6654,8 @@ function buildEvoWorkerSource(){
   src+='    case "rollback":await requestFromMain("rollback",msg.payload);break;\n';
   src+='    case "compact_memory":await handleCompactMemory(msg.payload);break;\n';
   src+='    case "get_recent_summaries_reply":break;\n';
-  src+='    case \"task_failure\":reflectionScheduler.recordFailure();self.postMessage({type:\"log\",payload:{level:\"warn\",message:\"[进化] 任务失败(\"+reflectionScheduler.failureCount+\")\"}});break;\n';
-  src+='    case \"task_success\":reflectionScheduler.recordSuccess();break;\n';
+  src+='    case "task_failure":reflectionScheduler.recordFailure();taskOutcomes.push({type:"failure",ts:Date.now(),taskId:msg.payload.taskId||"",errorType:msg.payload.errorType||"",skills:msg.payload.relevantSkills||[],summary:msg.payload.summary||""});if(taskOutcomes.length>MAX_TASK_OUTCOMES)taskOutcomes.shift();self.postMessage({type:"log",payload:{level:"warn",message:"[进化] 任务失败("+reflectionScheduler.failureCount+")"}});break;\n';
+  src+='    case "task_success":reflectionScheduler.recordSuccess();taskOutcomes.push({type:"success",ts:Date.now(),taskId:msg.payload.taskId||"",skills:msg.payload.relevantSkills||[],summary:msg.payload.summary||""});if(taskOutcomes.length>MAX_TASK_OUTCOMES)taskOutcomes.shift();break;\n';
   src+='    case "health_check":self.postMessage({id:"reply_"+Date.now(),replyTo:msg.id,type:"health_check_reply",payload:{ok:true}});break;\n';
   src+='  }\n';
   src+='};\n';
@@ -6568,26 +6694,32 @@ function buildEvoWorkerSource(){
   src+='\n';
 
   // === buildReflectionPrompt ===
-  src+='function buildReflectionPrompt(summaries,experiences,currentSkills,userFeedback){\n';
+  src+='function buildReflectionPrompt(summaries,experiences,currentSkills,userFeedback,usageStats,previousAnalysis){\n';
   src+='  userFeedback=userFeedback||[];\n';
   src+='  var skillsKeys=Object.keys(currentSkills||{});\n';
   src+='  var skillsList="";\n';
   src+='  for(var i=0;i<skillsKeys.length;i++){\n';
   src+='    var v=currentSkills[skillsKeys[i]];\n';
   src+='    var sid=v.id||skillsKeys[i].replace(".json","");\n';
-  src+='    skillsList+="- "+(v.name||skillsKeys[i])+" [ID: "+sid+"]: "+(v.trigger||"")+"\\n";\n';
+  src+='    var originTag=v.origin==="user"?"[用户上传]":"[进化生成]";\n';
+  src+='    var usage=usageStats?usageStats[sid]:null;var usageStr="";if(usage)usageStr=" 调用:"+usage.count+"次 成功率:"+Math.round((usage.successRate||0)*100)+"% 最后:"+new Date(usage.lastUsed||0).toISOString().substring(0,10);else usageStr=" 调用:0次(新技能)";\n';
+  src+='    skillsList+="- "+(v.name||skillsKeys[i])+" [ID: "+sid+"] "+originTag+usageStr+"\\n  触发: "+(v.trigger||"(无)")+"\\n  策略: "+(v.prompt_fragment||"(无)").substring(0,150)+"\\n";\n';
   src+='  }\n';
   src+='  var expList="";\n';
   src+='  for(var j=0;j<Math.min((experiences||[]).length,5);j++){\n';
-  src+='    expList+=(j+1)+". "+(experiences[j].text||"")+"\\n";\n';
+  src+='    var e=experiences[j];var meta="";if(e.timestamp)meta+="时间:"+e.timestamp+" ";if(e.task)meta+="任务:"+e.task+" ";if(e.outcome)meta+="结果:"+e.outcome+" ";if(e.relevance!==null)meta+="相关性:"+e.relevance+" ";\n';
+  src+='    expList+=(j+1)+". "+meta+"\\n   "+(e.text||"")+"\\n";\n';
   src+='  }\n';
   src+='  var fbList="";\n';
   src+='  for(var k=0;k<Math.min((userFeedback||[]).length,10);k++){\n';
-  src+='    fbList+=(k+1)+". ["+userFeedback[k].type+"] messageId="+userFeedback[k].messageId+" time="+userFeedback[k].timestamp+"\\n";\n';
+  src+='    var fb=userFeedback[k];var fbLine=(k+1)+". ["+fb.type+"] 时间:"+(fb.timestamp||"")+" messageId="+(fb.messageId||"");if(fb.content)fbLine+=" 内容:"+fb.content;if(fb.context)fbLine+=" 上下文:"+fb.context;\n';
+  src+='    fbList+=fbLine+"\\n";\n';
   src+='  }\n';
+  src+='  var outcomeList="";\n';
+  src+='  for(var oi=0;oi<Math.min(taskOutcomes.length,15);oi++){var o=taskOutcomes[oi];outcomeList+=(oi+1)+". ["+(o.type==="failure"?"FAIL":"OK")+"] 任务:"+(o.taskId||"?")+" 技能:"+(o.skills||[]).join(",")+" "+(o.summary||"").substring(0,100)+"\\n";}\n';
   // 构建反思Prompt - 使用已转义的JSON字符串
   // ★ 全部 base64 编码，零转义维护
-  var _schemaJSON = '{"analysis":"根因分析≤200字","action":"update_skill|add_skill|delete_skill|none","skill_id":"目标ID或空","new_content":{"name":"名称","trigger":"触发条件","prompt_fragment":"策略文本"}}';
+  var _schemaJSON = '{"analysis":"根因分析≤200字","action":"update_skill|add_skill|delete_skill|none","skill_id":"目标ID或空","new_content":{"name":"名称","trigger":"触发条件","prompt_fragment":"策略文本","code_snippet":"可选,JS辅助函数代码,须纯函数无副作用","code_description":"可选,代码用途说明(≤50字)","code_target_path":"可选,代码写入路径如/utils/helper.js"}}';
   src+='  var outputSchema=decodeURIComponent(escape(atob("'+btoa(unescape(encodeURIComponent(_schemaJSON)))+'")));\n';
   var _reflTpl =
     '[ROLE] 自我反思分析器\n'+
@@ -6595,13 +6727,15 @@ function buildEvoWorkerSource(){
     '▸ P2 对照反馈 — 用户说了什么？\n'+
     '▸ P3 检索经验 — 历史同类问题怎么解的？\n'+
     '▸ P4 诊断根因 — 问题出在哪？\n'+
-    '▸ P5 决定action — none/update_skill/update_trigger/revert\n'+
+    '▸ P5 决定action — none/update_skill/add_skill/delete_skill\n'+
     '[MUST] 问题必诊根因。无问题action=none。有修复方案必给new_content。\n\n'+
-    '## 近期任务摘要\n'+
+    '## 任务成败记录（最近15条）\n'+
+    '{OUTCOMES}\n\n## 近期任务摘要\n'+
     '{SUMMARIES}\n\n## 用户反馈\n'+
     '{FEEDBACK}\n\n## 相关历史经验\n'+
     '{EXPERIENCES}\n\n## 当前技能库\n'+
-    '{SKILLS}\n\n[OUTPUT_SCHEMA] {SCHEMA}'+
+    '{SKILLS}\n\n## 上一轮分析\n'+
+    '{PREV_ANALYSIS}\n\n## 技能去重提醒\n请检查技能列表中是否存在触发条件或策略高度重叠的技能对。若有，在 analysis 中注明并建议合并。\n\n[OUTPUT_SCHEMA] {SCHEMA}'+
     '\n<EXAMPLE>\n'+
     '{"analysis":"Python爬虫被反爬拦截，缺少User-Agent伪装","action":"update_skill","skill_id":"pyspider_001","new_content":{"name":"Python爬虫","trigger":"用户需要爬取网页数据","prompt_fragment":"使用requests.Session()设置User-Agent和延迟"}}\n'+
     '{"analysis":"当前无问题","action":"none","skill_id":"","new_content":null}\n'+
@@ -6609,8 +6743,10 @@ function buildEvoWorkerSource(){
   src+='  var _tpl=decodeURIComponent(escape(atob("'+btoa(unescape(encodeURIComponent(_reflTpl)))+'")));\n';
   src+='  return _tpl.replace("{SUMMARIES}",(summaries.slice(-10).join("\\n")||"(无)"))\n';
   src+='    .replace("{FEEDBACK}",fbList||"(无)")\n';
+  src+='    .replace("{OUTCOMES}",outcomeList||"(无)")\n';
   src+='    .replace("{EXPERIENCES}",expList||"(无)")\n';
   src+='    .replace("{SKILLS}",skillsList||"(空)")\n';
+  src+='    .replace("{PREV_ANALYSIS}",previousAnalysis||"(首轮)")\n';
   src+='    .replace("{SCHEMA}",outputSchema);\n';
   src+='}\n';
   src+='\n';
@@ -6624,6 +6760,7 @@ function buildEvoWorkerSource(){
   src+='  if(patch.action==="update_skill"){if(!patch.skill_id)return "缺少skill_id（update_skill需要）";if(currentSkills){var _found2=false;var _keys2=Object.keys(currentSkills);for(var _i2=0;_i2<_keys2.length;_i2++){var _k2=_keys2[_i2];var _obj2=currentSkills[_k2];if(_k2===patch.skill_id||_k2===patch.skill_id+".json"||(_obj2&&_obj2.id===patch.skill_id)){_found2=true;break;}}if(!_found2)return "技能不存在: "+patch.skill_id;}}\n';
   src+='  if(!patch.new_content)return "缺少new_content";\n';
   src+='  if(!patch.new_content.name||!patch.new_content.trigger||!patch.new_content.prompt_fragment)return "new_content缺少必要字段: name, trigger, prompt_fragment";\n';
+  src+='  if(patch.new_content.code_snippet){var cs=patch.new_content.code_snippet;if(cs.indexOf("eval(")>=0||cs.indexOf("Function(")>=0||cs.indexOf("fetch(")>=0||cs.indexOf("XMLHttpRequest")>=0||cs.indexOf("document.")>=0||cs.indexOf("window.")>=0)return "code_snippet包含不安全调用";}\n';
   src+='  if(patch.skill_id&&currentSkills){var _found3=false;var _keys3=Object.keys(currentSkills);var _matchedKey=null;for(var _i3=0;_i3<_keys3.length;_i3++){var _k3=_keys3[_i3];var _obj3=currentSkills[_k3];if(_k3===patch.skill_id||_k3===patch.skill_id+".json"||(_obj3&&_obj3.id===patch.skill_id)){_matchedKey=_k3;_found3=true;break;}}if(_found3&&currentSkills[_matchedKey]&&currentSkills[_matchedKey].origin==="user")return "禁止修改用户上传的技能: "+patch.skill_id;}\n';
   src+='  return null;\n';
   src+='}\n';
@@ -6644,22 +6781,28 @@ function buildEvoWorkerSource(){
   src+='async function runReflectionCycle(){\n';
   src+='  try{\n';
   src+='    lastReflectionTime=Date.now();\n';
+  src+='    var budgetLevel=getReflectionBudgetLevel();\n';
+  src+='    var maxRounds=budgetLevel==="full"?3:budgetLevel==="degraded"?2:1;\n';
+  src+='    var previousAnalysis="";var bestPatch=null;\n';
+  src+='    for(var round=1;round<=maxRounds;round++){\n';
+  src+='    self.postMessage({type:"log",payload:{level:"info",message:"[进化] 反思轮次 "+round+"/"+maxRounds}});\n';
   src+='    var reply=await requestFromMain("get_recent_summaries",{});\n';
   src+='    var summaries=(reply&&reply.summaries)?reply.summaries:[];\n';
   src+='    var skillsData=await requestFromMain("read_skills_for_reflection",{});\n';
   src+='    var experienceData=await requestFromMain("read_experiences_for_reflection",{query:summaries.join(" "),limit:5});\n';
   src+='    var feedbackData=await requestFromMain("read_feedback",{});\n';
   src+='    var skills=skillsData?skillsData.skills||{}:{};\n';
+  src+='    var usageStats=skillsData?skillsData.usageStats||{}:{};\n';
   src+='    var experiences=experienceData?experienceData.experiences||[]:[];\n';
   src+='    var userFeedback=feedbackData?feedbackData.feedback||[]:[];\n';
   src+='    if(summaries.length===0&&experiences.length===0){self.postMessage({type:"log",payload:{level:"info",message:"[进化] 无足够数据进行反思，跳过"}});return;}\n';
-  src+='    var reflectionPrompt=buildReflectionPrompt(summaries,experiences,skills,userFeedback);\n';
+  src+='    var reflectionPrompt=buildReflectionPrompt(summaries,experiences,skills,userFeedback,usageStats,previousAnalysis);\n';
   src+='    self.postMessage({type:\"log\",payload:{level:\"info\",message:\"[进化] 反思分析\"}});\n';
   src+='    var llmResponse=await requestFromMain("proxy_llm_call",{messages:[{role:"system",content:reflectionPrompt}],response_format:{type:"json_object"},max_tokens:4000,reasoning_effort:"max",thinking:{type:"enabled"}});\n';
   src+='    if(!llmResponse||!llmResponse.content){self.postMessage({type:"log",payload:{level:"warn",message:"[进化] LLM返回空响应"}});return;}\n';
   src+='    var patch;\n';
   src+='    try{patch=JSON.parse(llmResponse.content);}catch(e){self.postMessage({type:"error",payload:{code:"PATCH_PARSE_FAILED",message:"LLM响应不是有效JSON"}});return;}\n';
-  src+='    if(!patch||patch.action==="none"){self.postMessage({type:"log",payload:{level:"info",message:"[进化] 反思结论：无需修改"}});reflectionScheduler.recordSuccess();return;}\n';
+  src+='    if(!patch||patch.action==="none"){self.postMessage({type:"log",payload:{level:"info",message:"[进化] 反思结论：无需修改(轮次"+round+")"}});if(bestPatch){reflectionScheduler.recordSuccess();break;}else{reflectionScheduler.recordSuccess();return;}}\n';
   src+='    var validationError=validatePatch(patch,skills);\n';
   src+='    if(validationError){self.postMessage({type:"error",payload:{code:"PATCH_INVALID",message:validationError}});return;}\n';
   src+='    self.postMessage({type:"log",payload:{level:"info",message:"[进化] 补丁已生成: "+patch.action+" "+(patch.skill_id||"")}});\n';
@@ -6670,9 +6813,12 @@ function buildEvoWorkerSource(){
   src+='    var budgetLevel=getReflectionBudgetLevel();\n';
   src+='    try{\n';
   src+='      if(budgetLevel==="full"||budgetLevel==="degraded"){\n';
+  src+='        var blindSkip=budgetLevel==="degraded"&&reflectionScheduler.getTrust((patch.skill_id||(patch.new_content?patch.new_content.name:"")).replace(".json",""))>=3;\n';
+  src+='        if(!blindSkip){\n';
   src+='        var blindResult=await performBlindJudge(patch,applyResult.testVersion,summaries,skills);\n';
   src+='        if(!blindResult.passed){\n';
   src+='          self.postMessage({type:"log",payload:{level:"warn",message:"[进化] 双盲裁判未通过: "+blindResult.reason}});\n';
+  src+='          reflectionScheduler.adjustTrust((patch.skill_id||(patch.new_content?patch.new_content.name:"")).replace(".json",""),-1);\n';
   src+='          await requestFromMain("write_audit_log",{action:"eval_rejected",stage:"blind_judge",patch:patch,reason:blindResult.reason});\n';
   src+='          await requestFromMain("discard_test_branch",{patch:patch,version:applyResult.testVersion});\n';
   src+='          reflectionScheduler.recordFailure();\n';
@@ -6681,6 +6827,8 @@ function buildEvoWorkerSource(){
   src+='          return;\n';
   src+='        }\n';
   src+='        self.postMessage({type:"log",payload:{level:"info",message:"[进化] 双盲裁判通过"}});\n';
+  src+='        reflectionScheduler.adjustTrust((patch.skill_id||(patch.new_content?patch.new_content.name:"")).replace(".json",""),1);\n';
+  src+='        }else{self.postMessage({type:"log",payload:{level:"info",message:"[进化] 技能信任度过高，跳过双盲裁判"}});}\n';
   src+='      }\n';
   src+='      if(budgetLevel==="full"){\n';
   src+='        var redResult=await performRedTeam(patch);\n';
@@ -6700,6 +6848,8 @@ function buildEvoWorkerSource(){
   src+='    await requestFromMain("write_audit_log",{action:"merge_success",patch:patch,version:applyResult.testVersion});\n';
   src+='    reflectionScheduler.recordSuccess();\n';
   src+='    self.postMessage({type:"log",payload:{level:"info",message:"[进化] 反思循环完成"}});\n';
+  src+='    previousAnalysis=patch.analysis||"";bestPatch=patch;\n';
+  src+='    }\n';
   src+='  }catch(error){self.postMessage({type:"error",payload:{code:"REFLECTION_FAILED",message:error.message}});reflectionScheduler.recordFailure();}\n';
   src+='}\n';
   src+='\n';
@@ -6718,7 +6868,7 @@ function buildEvoWorkerSource(){
   src+='  var testCases=[];\n';
   src+='  for(var i=0;i<summaries.length&&testCases.length<3;i++){\n';
   src+='    var s=summaries[i];if(!s)continue;\n';
-  src+='    var idx=s.indexOf("[user]");\n';
+  src+='    var idx=s.indexOf("[user]");if(idx<0)idx=s.indexOf("[user_input]");if(idx<0){var re=/\\][^\\]]*user[^\\]]*\\]/i;var m=re.exec(s);if(m)idx=s.indexOf(m[0]);}\n';
   src+='    if(idx>=0){\n';
   src+='      var userText=s.substring(idx+6).trim();\n';
   src+='      if(userText.length>10){\n';
@@ -7672,7 +7822,11 @@ function handleEvoWorkerMessage(event){
   if(msg.type==='log'){debugLogger[msg.payload.level||'info'](msg.payload.message);return;}
   if(msg.type==='get_recent_summaries'){
     var entries=shortTermMemory.getRecent(50);
-    var summaries=entries.map(function(e){return '['+e.type+'] '+e.content.substring(0,200);});
+    var summaries=entries.map(function(e){
+      var ts=new Date(e.ts).toISOString().substring(0,19).replace('T',' ');
+      var taskTag=e.taskId?' [task:'+e.taskId.substring(0,8)+']':'';
+      return '['+ts+']['+e.type+']'+taskTag+' '+e.content.substring(0,200);
+    });
     evoWorker.postMessage({id:'reply_'+Date.now(),replyTo:msg.id,type:'get_recent_summaries_reply',payload:{summaries:summaries}});
     return;
   }
@@ -7809,7 +7963,10 @@ async function handleProxyLLMCall(msg){
   });
   var body={model:model,messages:_cleanedMessages,max_tokens:max_tokens,temperature:settings.temperature||0.6};
   if(response_format)body.response_format=response_format;
-  if(settings.reasoning_effort==='off'){body.thinking={type:'disabled'};}else{body.thinking={type:'enabled'};body.reasoning_effort=settings.reasoning_effort||'max';}
+  var rEff=payload.reasoning_effort||settings.reasoning_effort||'max';
+  if(payload.thinking&&payload.thinking.type==='disabled'){body.thinking={type:'disabled'};}
+  else if(rEff=='off'){body.thinking={type:'disabled'};}
+  else{body.thinking={type:'enabled'};body.reasoning_effort=rEff;}
   var response=await fetch(baseUrl+'/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+settings.deepseek_api_key},
@@ -7850,8 +8007,31 @@ async function handleReadSkillsForReflection(msg){
         if(content)skills[activeSkills[i]]=JSON.parse(content);
       }catch(e){debugLogger.warn('保存消息失败: '+e.message);}
     }
-    return {skills:skills,version:index.version};
+    var statsContent=await readFile('/skills/_usage_stats.jsonl');
+    var stats={};
+    if(statsContent){var lines=statsContent.trim().split('\n');for(var si=0;si<lines.length;si++){try{var rec=JSON.parse(lines[si]);stats[rec.skillId]=rec;}catch(e){}}}
+    return {skills:skills,version:index.version,usageStats:stats};
   }catch(e){return {skills:{}};}
+}
+
+async function recordSkillUsage(skillId,success){
+  try{
+    var ts=Date.now();
+    var line=JSON.stringify({skillId:skillId,ts:ts,success:!!success})+'\n';
+    var existing=await readFile('/skills/_usage_stats.jsonl');
+    if(!existing){await createFile('/skills/_usage_stats.jsonl',line);return;}
+    var lines=existing.trim().split('\n');
+    var stats={};
+    for(var i=0;i<lines.length;i++){try{var r=JSON.parse(lines[i]);if(r.skillId)stats[r.skillId]=r;}catch(e){}}
+    var cur=stats[skillId]||{skillId:skillId,count:0,successCount:0,lastUsed:ts,successRate:0};
+    cur.count++;if(success)cur.successCount=(cur.successCount||0)+1;
+    cur.lastUsed=ts;cur.successRate=cur.successCount/cur.count;
+    stats[skillId]=cur;
+    var out='';
+    var keys=Object.keys(stats);
+    for(var j=0;j<Math.min(keys.length,50);j++){out+=JSON.stringify(stats[keys[j]])+'\n';}
+    await updateFile('/skills/_usage_stats.jsonl',out);
+  }catch(e){debugLogger.warn('技能统计写入失败: '+e.message);}
 }
 
 async function handleReadExperiencesForReflection(msg){
@@ -7860,7 +8040,18 @@ async function handleReadExperiencesForReflection(msg){
     var query=payload.query||'';
     var limit=payload.limit||5;
     var experiences=await searchSimilarExperiences(query,limit);
-    return {experiences:experiences};
+    var structured=experiences.map(function(ep){
+      var ts=ep.ts||ep.timestamp||'';
+      if(typeof ts==='number')ts=new Date(ts).toISOString().substring(0,19).replace('T',' ');
+      return {
+        text:ep.text||'',
+        timestamp:ts,
+        task:ep.task||ep.taskId||'',
+        outcome:ep.outcome||ep.result||'',
+        relevance:ep.score!==undefined?Math.round(ep.score*100)/100:null
+      };
+    });
+    return {experiences:structured};
   }catch(e){return {experiences:[]};}
 }
 
@@ -7927,6 +8118,7 @@ async function handleApplySkillPatch(payload){
       };
       var filename=skillId+'.json';
       await createFile('/skills/'+filename,JSON.stringify(skillObj,null,2));
+      if(patch.new_content.code_snippet&&patch.new_content.code_target_path){try{await createFile(patch.new_content.code_target_path,patch.new_content.code_snippet);}catch(e){debugLogger.warn('code_snippet写入失败: '+e.message);}}
       currentIndex.active_skills=(currentIndex.active_skills||[]).concat([filename]);
     }else if(patch.action==='update_skill'){
       var filename=patch.skill_id+'.json';
@@ -7974,6 +8166,7 @@ async function handleApplySkillPatch(payload){
       skillObj.version=(skillObj.version||1)+1;
       skillObj.updated_at=new Date().toISOString();
       await updateFile('/skills/'+filename,JSON.stringify(skillObj,null,2));
+      if(patch.new_content.code_snippet&&patch.new_content.code_target_path){try{await createFile(patch.new_content.code_target_path,patch.new_content.code_snippet);}catch(e){debugLogger.warn('code_snippet更新写入失败: '+e.message);}}
     }else if(patch.action==='delete_skill'){
       var delfilename=patch.skill_id+'.json';
       await deleteFile('/skills/'+delfilename);
@@ -8448,11 +8641,13 @@ async function streamChatCompletion(messages,tools,onChunk,source){
     if(!response){
       activeLLMController=null;
       if(lastFetchError instanceof TypeError)continue;
+      if(source==='user'&&evoWorker){evoWorker.postMessage({type:'task_failure',payload:{taskId:currentConversationId||'',errorType:'NetworkError',relevantSkills:skillCache.activeSkillIds||[],summary:(lastFetchError?lastFetchError.message:'API请求失败').substring(0,200)}});}
       throw lastFetchError||new Error('API请求失败');
     }
     activeLLMController=null;
     if(!response.ok){
       var errText=await response.text();
+      if(source==='user'&&evoWorker){evoWorker.postMessage({type:'task_failure',payload:{taskId:currentConversationId||'',errorType:'HTTP_'+response.status,relevantSkills:skillCache.activeSkillIds||[],summary:errText.substring(0,200)}});}
       throw new Error('API请求失败 ('+response.status+'): '+errText);
     }
     if(attempt===1){
@@ -8516,6 +8711,7 @@ async function streamChatCompletion(messages,tools,onChunk,source){
         recordDailyTokenUsage(messages, totalStreamContent, streamUsage);
         _tagMessageTokens(messages, streamUsage);
         debugLogger.info(' 流式完成: '+finishReason+' | 来源:'+source+' | 消息数:'+messages.length+(streamUsage?' | usage:精确':' | usage:估算'));
+        if(source==='user'&&evoWorker){evoWorker.postMessage({type:'task_success',payload:{taskId:currentConversationId||'',relevantSkills:skillCache.activeSkillIds||[],summary:totalStreamContent.substring(0,200)}});}
         return finishReason;
       }
     }finally{
@@ -8529,9 +8725,11 @@ async function streamChatCompletion(messages,tools,onChunk,source){
       debugLogger.warn(' 流读取中断('+(totalStreamContent?totalStreamContent.length+'字已收':'空收')+')，将重试');
       continue;
     }
+    if(source==='user'&&evoWorker){evoWorker.postMessage({type:'task_failure',payload:{taskId:currentConversationId||'',errorType:'StreamError',relevantSkills:skillCache.activeSkillIds||[],summary:(streamError?streamError.message:'').substring(0,200)}});}
     throw streamError;
   }
 }
+
 
 // ================================================================
 // 第25部分：工具调用解析
@@ -9003,7 +9201,11 @@ async function scheduleChartRender(chartId,retries){
     myChart.setOption(option);
     // 移动端：延迟resize确保尺寸正确
     setTimeout(function(){try{myChart.resize();}catch(e){}},300);
-    window.addEventListener('resize',function(){try{myChart.resize();}catch(e){}});
+    var _resizeHandler=function(){try{myChart.resize();}catch(e){}};
+    window.addEventListener('resize',_resizeHandler);
+    // 在图表销毁时清理（需要把 _resizeHandler 关联到 myChart 实例）
+    if(myChart._resizeHandler)window.removeEventListener('resize',myChart._resizeHandler);
+    myChart._resizeHandler=_resizeHandler;
     chartRenderQueue=chartRenderQueue.filter(function(t){return t.chartId!==chartId;});
 
 
@@ -11004,10 +11206,9 @@ async function toolPdfGenerate(args){
 }
 
 // --- 自定义API调用 (支持{{VAR}}模板替换) ---
-var _mcpTools={};
 async function toolCustomApiCall(args){
   var envVars=settings.environment_variables||{};
-  var endpoint=args.endpoint.replace(/\{\{(\w+)\}\}/g,function(m,key){return envVars[key]||m;});
+  var endpoint=(args.endpoint||'').replace(/\{\{(\w+)\}\}/g,function(m,key){return envVars[key]||m;});
   var fetchOpts={method:args.method||'GET',headers:Object.assign({'Accept':'application/json'},args.headers||{}),signal:AbortSignal.timeout(args.timeout||15000)};
   if(args.body&&(args.method==='POST'||args.method==='PUT'||args.method==='PATCH')){
     var _body=args.body;
@@ -11019,8 +11220,20 @@ async function toolCustomApiCall(args){
     else if(!args.body_type||args.body_type==='json'){fetchOpts.headers['Content-Type']='application/json';}
     fetchOpts.body=_body;
   }
-  try{var resp=await fetch(endpoint,fetchOpts);var text=await resp.text();var result=text.length>8000?text.substring(0,8000)+'\n...(截断，全长'+text.length+'字)':text;return 'HTTP '+resp.status+' | '+endpoint+'\n'+result;}
-  catch(e){return ' API调用失败: '+e.message+' | '+endpoint;}
+  try{
+    var resp=await fetch(endpoint,fetchOpts);
+    var ct=resp.headers.get('Content-Type')||'';
+    var text=await resp.text();
+    var result;
+    if(ct.indexOf('application/json')>=0){
+      try{result=JSON.stringify(JSON.parse(text),null,2);}catch(e){result=text;}
+    }else{
+      result=text;
+    }
+    var totalLen=text.length;
+    if(result.length>8000)result=result.substring(0,8000)+'\n\n══════════════════\n📎 响应过长，已展示前 8000 / 共 '+totalLen+' 字符。\n💡 建议：用更精确的查询参数缩小返回范围，或将结果写入文件后用 filesystem 分段读取。';
+    return 'HTTP '+resp.status+' | '+ct+' | '+endpoint+'\n'+result;
+  }catch(e){return ' API调用失败: '+e.message+' | '+endpoint;}
 }
 
 // --- MCP 多连接管理 ---
@@ -11029,6 +11242,7 @@ var _mcpConnections=[];  // [{id,name,url,transport,enabled,tools:[]}]
 
 async function _connectSingleMcp(conn){
   if(!conn.url)return null;
+  if(conn.transport==='stdio')return {error:'stdio 传输类型当前不支持。请使用 sse 或 http 类型的 MCP 服务器。'};
   try{
     var base=conn.url.replace(/\/$/,'');
     var resp=await fetch(base+'/tools/list',{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(8000)});
@@ -11062,8 +11276,14 @@ async function toolMcpConnect(args){
       var r=await _connectSingleMcp(connections[i]);
       results.push(r);
     }
-    var totalTools=0;var summary=results.map(function(r){if(r.error)return ' '+r.id+': '+r.error;totalTools+=r.tools.length;return ' '+r.name+' ('+r.id+'): '+r.tools.join(', ');}).join('\n');
-    return ' 已连接 '+results.filter(function(r){return !r.error;}).length+'/'+connections.length+' 个MCP服务器，共 '+totalTools+' 个工具:\n'+summary;
+    var successCount=0;var totalTools=0;
+    var summary=results.map(function(r){
+      if(!r)return ' ⚠ 连接返回空 (URL为空?)';
+      if(r.error){return ' '+r.id+': '+r.error;}
+      totalTools+=r.tools.length;successCount++;
+      return ' '+r.name+' ('+r.id+'): '+r.tools.join(', ');
+    }).join('\n');
+    return ' 已连接 '+successCount+'/'+connections.length+' 个MCP服务器，共 '+totalTools+' 个工具:\n'+summary;
   }
   
   var targetId=args.id;
@@ -11090,15 +11310,24 @@ async function toolUserFunctionCall(args){
   if(!fn)return ' 未找到函数: '+args.function_id+'。已注册: '+(funcs.map(function(f){return f.id;}).join(', ')||'无');
   if(fn.enabled===false)return ' 函数 '+args.function_id+' 已禁用。';
   try{
-    // 用 new Function 沙箱执行（限制访问全局变量）
-    var wrappedCode='return ('+fn.code+')';
-    var userFunc=(new Function(wrappedCode))();
+    // 通过 Web Worker 隔离执行（移除主线程全局访问权）
+    var workerCode='self.onmessage=function(e){var ctx=e.data;try{var fn='+JSON.stringify(fn.code)+';Promise.resolve(fn(ctx)).then(function(r){self.postMessage({ok:true,result:r});}).catch(function(err){self.postMessage({ok:false,error:err.message});});}catch(err){self.postMessage({ok:false,error:err.message});}}';
+    var blob=new Blob([workerCode],{type:'application/javascript'});
+    var workerUrl=URL.createObjectURL(blob);
+    var worker=new Worker(workerUrl);
+    URL.revokeObjectURL(workerUrl);
     var params=args.params||{};
-    // 注入上下文：环境变量、虚拟文件路径
     var context={env:settings.environment_variables||{},params:params};
-    var result=await userFunc(context);
+    var result=await new Promise(function(resolve,reject){
+      var timer=setTimeout(function(){worker.terminate();reject(new Error('函数执行超时(10s)'));},10000);
+      worker.onmessage=function(e){clearTimeout(timer);worker.terminate();if(e.data.ok)resolve(e.data.result);else reject(new Error(e.data.error));};
+      worker.onerror=function(e){clearTimeout(timer);worker.terminate();reject(new Error(e.message));};
+      worker.postMessage(context);
+    });
     var resultStr=typeof result==='string'?result:JSON.stringify(result,null,2);
-    return ' 函数 '+args.function_id+' 执行完成:\n'+resultStr.substring(0,8000);
+    var display=resultStr;
+    if(display.length>8000)display=display.substring(0,8000)+'\n\n══════════════════\n📎 输出过长，已展示前 8000 / 共 '+resultStr.length+' 字符。\n💡 建议：让函数返回精简摘要，或将完整结果写入文件。';
+    return ' 函数 '+args.function_id+' 执行完成:\n'+display;
   }catch(e){return ' 函数 '+args.function_id+' 执行失败: '+e.message;}
 }
 
@@ -11111,12 +11340,13 @@ var CONVERT_MAP={
   'md→html':async function(content,opt){await loadLibrary('markdown-it');return'<!DOCTYPE html>\n<html><body>\n'+window.markdownit().render(content)+'\n</body></html>';},
   'html→md':async function(content,opt){var t=content.replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n\n').replace(/<[^>]+>/g,'');return t.replace(/\n{3,}/g,'\n\n').trim();},
   'csv→xlsx':async function(content,opt){await loadLibrary('xlsx');var arr=content.trim().split('\n').map(function(l){return l.split(',');});var ws=XLSX.utils.aoa_to_sheet(arr);var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sheet1');var buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});return new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});},
-  'xlsx→csv':async function(content,opt){if(typeof content==='string'&&content.indexOf('# 表格解析结果')===0){throw new Error('此文件上传时已解析为表格Markdown，无需再次转换。请直接用 filesystem read 读取。');}await loadLibrary('xlsx');var wb=XLSX.read(new Uint8Array(content.length).map(function(_,i){return content.charCodeAt(i);}),{type:'array'});var out='';for(var n=0;n<wb.SheetNames.length;n++){out+=(n>0?'\n\n':'')+XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[n]]);}return out;}
+  'xlsx→csv':async function(content,opt){if(typeof content==='string'&&content.indexOf('# 表格解析结果')===0){throw new Error('此文件上传时已解析为表格Markdown，无需再次转换。请直接用 filesystem read 读取。');}await loadLibrary('xlsx');var bytes=new Uint8Array(content.length);for(var bi=0;bi<content.length;bi++)bytes[bi]=content.charCodeAt(bi);var wb=XLSX.read(bytes,{type:'array'});var out='';for(var n=0;n<wb.SheetNames.length;n++){out+=(n>0?'\n\n':'')+XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[n]]);}return out;}
 };
 
 function parseCSV(line){var result=[],current='',inQuotes=false;for(var i=0;i<line.length;i++){var c=line[i];if(inQuotes){if(c==='"'){if(i+1<line.length&&line[i+1]==='"'){current+='"';i++;}else{inQuotes=false;}}else{current+=c;}}else{if(c==='"'){inQuotes=true;}else if(c===','){result.push(current);current='';}else{current+=c;}}}result.push(current);return result;}
 
 async function toolConvertFormat(args){
+  if(!args.input_path)return ' 缺少参数: input_path';
   var input=await readFile(args.input_path);
   if(input===null)return ' 源文件不存在: '+args.input_path;
   var fromExt=(args.from_format||args.input_path.split('.').pop()||'').toLowerCase();
@@ -11128,12 +11358,15 @@ async function toolConvertFormat(args){
     var result=await fn(input,args.options||{});
     if(result instanceof Blob){
       var outPath=args.output_path||('/downloads/converted_'+Date.now()+'.'+toFmt);
-      var ab=await result.arrayBuffer();var str=await new Response(new Uint8Array(ab)).text();
-      await createFile(outPath,str);registerGeneratedFile(result,outPath.split('/').pop(),result.type);
+      var filename=outPath.split('/').pop();
+      await createFile(outPath,result);
+      registerGeneratedFile(result,filename,result.type);
       return ' 已转换: '+args.input_path+' → '+outPath+' ('+formatSize(result.size)+')';
     }
     if(args.output_path){await createFile(args.output_path,result);return ' 已转换: '+args.input_path+' → '+args.output_path;}
-    return ' 转换完成 ('+key+'):\n'+result.substring(0,8000);
+    var display=result;
+    if(display.length>8000)display=display.substring(0,8000)+'\n\n══════════════════\n📎 转换结果过长，已展示前 8000 / 共 '+result.length+' 字符。\n💡 建议：指定 output_path 将完整结果写入文件。';
+    return ' 转换完成 ('+key+'):\n'+display;
   }catch(e){return ' 转换失败: '+e.message;}
 }
 
@@ -11170,7 +11403,7 @@ async function toolGeoSearch(args){
     if(!pos)return JSON.stringify({authorized:false,status:'gps_denied',message:' 未指定 lat/lng 且无法获取GPS定位。请传入坐标参数或先授权定位权限（设置→地理位置→请求定位权限）。'});
     args.lat=pos.lat;args.lng=pos.lng;
   }
-  var lat=args.lat,lng=args.lng,radius=args.radius||1000,category=args.category||'restaurant';
+  var lat=args.lat,lng=args.lng,radius=args.radius||1000,category=(args.category||'restaurant').replace(/["\\]/g,'');
   var query='[out:json][timeout:5];\n(\n  node["amenity"~"'+category+'"](around:'+radius+','+lat+','+lng+');\n  way["amenity"~"'+category+'"](around:'+radius+','+lat+','+lng+');\n);\nout center '+(args.limit||10)+';';
   var data=await _geoFetchWithFallback(GEO_OVERPASS_INSTANCES,function(instance){return {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(query)};},8000);
   if(!data||!data.elements)return JSON.stringify({authorized:true,status:'network_error',message:' 附近搜索失败(全部Overpass公共实例不可达)。\\n 这是正常的——公共实例有时限流。建议: 1)稍后重试 2)缩小radius 3)切换category'});
@@ -11189,7 +11422,7 @@ async function toolGeoGeocode(args){
   if(!settings.geo_enabled)return JSON.stringify({authorized:false,status:'tool_disabled',message:' 地理位置工具未启用。请在设置→地理位置中开启。'});
   var data=await _geoFetchWithFallback(GEO_NOMINATIM_INSTANCES,function(instance){
     return {
-      urlSuffix:'/search?format=json&q='+encodeURIComponent(args.address)+'&limit=3&accept-language=zh',
+      urlSuffix:'/search?format=json&q='+encodeURIComponent(args.address||'')+'&limit=3&accept-language=zh',
       headers:{'User-Agent':'ExoApp/1.0 (local geocoding tool)'}
     };
   },8000);
@@ -11200,36 +11433,58 @@ async function toolGeoGeocode(args){
 
 async function toolGeoIp(args){
   if(!settings.geo_enabled)return JSON.stringify({authorized:false,status:'tool_disabled',message:' 地理位置工具未启用。请在设置→地理位置中开启。'});
-  try{
-    var resp=await fetch('https://ipapi.co/json/',{signal:AbortSignal.timeout(5000)});
-    if(!resp.ok)return JSON.stringify({authorized:true,status:'network_error',message:' IP定位失败 (HTTP '+resp.status+')'});
-    var data=await resp.json();
-    return JSON.stringify({authorized:true,status:'ok',ip:data.ip,city:data.city,region:data.region,country:data.country_name,lat:data.latitude,lon:data.longitude,timezone:data.timezone,org:data.org},null,2);
-  }catch(e){return JSON.stringify({authorized:true,status:'network_error',message:' IP定位失败: '+e.message+'。降级尝试备用服务…'});}
+  var ipServices=[{url:'https://ipapi.co/json/',parser:function(d){return {ip:d.ip,city:d.city,region:d.region,country:d.country_name,lat:d.latitude,lon:d.longitude,timezone:d.timezone,org:d.org};}},{url:'https://ipwho.is/',parser:function(d){return {ip:d.ip,city:d.city,region:d.region,country:d.country,lat:d.latitude,lon:d.longitude,timezone:d.timezone?d.timezone.id:'',org:d.connection?d.connection.org:''};}}];
+  for(var si=0;si<ipServices.length;si++){
+    try{
+      var resp=await fetch(ipServices[si].url,{signal:AbortSignal.timeout(5000)});
+      if(!resp.ok)continue;
+      var data=await resp.json();
+      if(!data||data.error)continue;
+      var r=ipServices[si].parser(data);
+      return JSON.stringify({authorized:true,status:'ok',source:ipServices[si].url,ip:r.ip,city:r.city,region:r.region,country:r.country,lat:r.lat,lon:r.lon,timezone:r.timezone,org:r.org},null,2);
+    }catch(e){continue;}
+  }
+  return JSON.stringify({authorized:true,status:'network_error',message:' IP定位失败: 全部IP服务不可达（ipapi.co + ipwho.is）。请检查网络连接。'});
 }
 
 // --- 邮件发送 ---
 async function toolSendEmail(args){
   var env=settings.environment_variables||{};
   var smtpHost=env.SMTP_HOST||settings.smtp_host||'smtp.gmail.com';
-  var smtpPort=parseInt(env.SMTP_PORT||settings.smtp_port)||587;
+    var smtpPort=parseInt(env.SMTP_PORT||settings.smtp_port);
+  if(isNaN(smtpPort)||smtpPort<1||smtpPort>65535)smtpPort=587;
   var smtpUser=env.SMTP_USER||settings.smtp_user||'';
   var smtpPass=env.SMTP_PASS||settings.smtp_pass||'';
   if(!settings.email_enabled)return ' 邮件工具未启用。请在设置→邮件中开启并配置SMTP。';
   if(!smtpUser||!smtpPass)return ' 请先在设置→邮件中配置 SMTP 用户名和密码。\n\n 常用配置: Gmail需开启两步验证+应用专用密码; QQ邮箱→smtp.qq.com:465(SSL); 163→smtp.163.com:465';
   var body=args.body||'';
-  if(args.body_type==='markdown'){await loadLibrary('markdown-it');body='<html><body>'+window.markdownit().render(body)+'</body></html>';}
+  var plainBody='';
+  if(args.body_type==='markdown'){
+    await loadLibrary('markdown-it');
+    var htmlBody=window.markdownit().render(body);
+    plainBody=body.replace(/#{1,6}\s/g,'').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1');
+    body='<html><body>'+htmlBody+'</body></html>';
+  }
   var relayUrl=env.SMTP_RELAY_URL||settings.smtp_relay_url||'';
   if(relayUrl){
     try{
-      var resp=await fetch(relayUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:smtpHost,port:smtpPort,user:smtpUser,pass:smtpPass,to:args.to,subject:args.subject||'',body:body,cc:args.cc||'',isHtml:args.body_type==='markdown'}),signal:AbortSignal.timeout(20000)});
+      var resp=await fetch(relayUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:smtpHost,port:smtpPort,user:smtpUser,pass:smtpPass,to:args.to,subject:args.subject||'',body:body,plainBody:plainBody,cc:args.cc||'',isHtml:args.body_type==='markdown'}),signal:AbortSignal.timeout(20000)});
       if(resp.ok)return ' 邮件已发送至 '+args.to;
       return ' 中继发送失败 (HTTP '+resp.status+')';
     }catch(e){return ' 中继发送失败: '+e.message+'\n\n 已打开默认邮件客户端作为备选。';}
   }
-  var mailto='mailto:'+args.to+'?subject='+encodeURIComponent(args.subject||'')+'&body='+encodeURIComponent((args.body||'').substring(0,1500));
+  var bodyText=args.body||'';
+  var truncated=bodyText.length>1500;
+  var mailtoBody=truncated?bodyText.substring(0,1500):bodyText;
+  var mailto='mailto:'+args.to+'?subject='+encodeURIComponent(args.subject||'')+'&body='+encodeURIComponent(mailtoBody);
   window.open(mailto,'_blank');
-  return ' 已打开默认邮件客户端。\n 如需自动发送，请在设置→邮件中配置 SMTP_RELAY_URL (SMTP中继端点)。\n\n主题: '+args.subject+'\n收件人: '+args.to;
+  var note=' 已打开默认邮件客户端。';
+  if(truncated){
+    note+='\n\n══════════════════\n📎 正文过长（'+bodyText.length+' 字符），邮件客户端仅接收前 1500 字符。';
+    note+='\n💡 完整内容未丢失。如需发送完整邮件，请在设置→邮件中配置 SMTP_RELAY_URL，可实现无截断自动发送。';
+  }
+  note+='\n\n主题: '+args.subject+'\n收件人: '+args.to;
+  return note;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -11256,12 +11511,13 @@ async function toolArchive(args){
       if(content===null)continue;
       // 去掉公共前缀
       var entryName=fp.replace(dirPath.replace(/\/$/,'')+'/','').replace(/^\//,'');
-      if(args.password){zip.file(entryName,content,{createFolders:true});}
-      else{zip.file(entryName,content,{createFolders:true});}
+      zip.file(entryName,content,{createFolders:true});
       added++;
     }
     if(!added)return ' 所有文件读取失败。';
-    var zipBlob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}},function(meta){});
+    var genOpts={type:'blob',compression:'DEFLATE',compressionOptions:{level:6}};
+    if(args.password)genOpts.password=args.password;
+    var zipBlob=await zip.generateAsync(genOpts,function(meta){});
     var outPath=args.output_path||('/downloads/archive_'+Date.now()+'.zip');
     var ab=await zipBlob.arrayBuffer();var b64='';
     var bytes=new Uint8Array(ab);
@@ -11305,7 +11561,7 @@ async function toolArchive(args){
       var fullPath=outDir+entryName.replace(/^\//,'');
       try{
         var dirPart=fullPath.substring(0,fullPath.lastIndexOf('/'));
-        if(dirPart)await createFile(dirPart+'/.dir',''); // 确保目录存在
+        if(dirPart)await ensureDirectoryExists(dirPart);
         await createFile(fullPath,data);
         extracted.push(fullPath);
       }catch(e){}
@@ -11374,23 +11630,137 @@ async function _ensureMeSpeak(){
   _meSpeakLoading=true;
   try{
     if(typeof meSpeak==='undefined'){await loadLibrary('mespeak');if(typeof meSpeak==='undefined')throw new Error('meSpeak库加载失败');}
+    // ── 步骤A: loadConfig ──
+    var configLoaded=false;
+    if(typeof meSpeak.loadConfig==='function'){
+      if(typeof meSpeakConfig!=='undefined'){
+        try{meSpeak.loadConfig(meSpeakConfig);configLoaded=true;debugLogger.info('meSpeak config已加载(内置meSpeakConfig)');}
+        catch(ce){debugLogger.warn('meSpeak loadConfig内置失败: '+ce.message);}
+      }
+      if(!configLoaded){
+        try{
+          var cfgUrl='https://cdn.jsdelivr.net/gh/btopro/mespeak@master/mespeak_config.json';
+          var cfgResp=await fetch(cfgUrl,{signal:AbortSignal.timeout(8000)});
+          if(cfgResp.ok){
+            var cfgJson=await cfgResp.json();
+            meSpeak.loadConfig(cfgJson);configLoaded=true;debugLogger.info('meSpeak config已加载(远程JSON)');
+          }
+        }catch(cfgErr){debugLogger.warn('meSpeak远程config失败: '+cfgErr.message);}
+      }
+    }
+    // ── 步骤B: 激活中文语音 ──
+    if(typeof meSpeak.setDefaultVoice==='function'){
+      try{meSpeak.setDefaultVoice('zh');debugLogger.info('meSpeak setDefaultVoice zh OK');}catch(sv){debugLogger.warn('setDefaultVoice zh: '+sv.message);}
+    }else if(typeof meSpeak.setVoice==='function'){
+      try{meSpeak.setVoice('zh');debugLogger.info('meSpeak setVoice zh OK');}catch(sv){debugLogger.warn('setVoice zh: '+sv.message);}
+    }
+    if(typeof meSpeak.loadVoice==='function'){
+      try{
+        var zhVUrl='https://cdn.jsdelivr.net/gh/btopro/mespeak@master/voices/zh.json';
+        await _loadMeSpeakVoice('zh',zhVUrl);
+        debugLogger.info('meSpeak loadVoice zh OK');
+      }catch(lve){debugLogger.warn('meSpeak loadVoice zh: '+lve.message);}
+    }
+    // ── 步骤C: 烟雾测试 ──
+    try{
+      var smoke=meSpeak.speak('test',{amplitude:100,pitch:1,speed:150});
+      var smokeType=typeof smoke;
+      var smokeStr=smokeType==='object'?'对象('+(smoke instanceof ArrayBuffer?'ArrayBuffer':smoke instanceof Uint8Array?'Uint8Array':Object.prototype.toString.call(smoke))+')':(smokeType+'='+String(smoke).substring(0,30));
+      debugLogger.info('meSpeak smoke: 类型='+smokeType+' 值='+smokeStr);
+    }catch(smokeErr){debugLogger.warn('meSpeak smoke异常: '+smokeErr.message);}
     _meSpeakReady=true;
   }catch(e){_meSpeakFailed=true;throw e;}
   finally{_meSpeakLoading=false;}
 }
 
+// 加载 meSpeak voice JSON 文件（返回 Promise）—— 仅 v2.0+ 支持
+function _loadMeSpeakVoice(voiceId,url){
+  return new Promise(function(resolve,reject){
+    if(typeof meSpeak.isVoiceLoaded!=='function'||typeof meSpeak.loadVoice!=='function'){
+      // v1.9.6 full.js 已内嵌所有语音，无需加载
+      resolve();return;
+    }
+    if(meSpeak.isVoiceLoaded(voiceId)){resolve();return;}
+    try{
+      meSpeak.loadVoice(url,function(success,id,msg){
+        if(success)resolve();else reject(new Error(msg||'voice加载失败'));
+      });
+    }catch(e){reject(e);}
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 内置汉字→拼音（~2500常用字），平铺格式：{汉字}{拼音}，CJK边界自动解析
+// ═══════════════════════════════════════════════════════════════
+var _PY_DATA="的一de5是shi4了le5不bu4人ren2在zai4有you3我wo3他ta1这zhe4中zhong1大da4国guo2经jing1以yi3上shang4们men5地di4个ge4到dao4说shuo1时shi2要yao4为wei4子zi5和he2你ni3可ke3出chu1能neng2下xia4过guo4自zi4年nian2会hui4生sheng1发fa1成cheng2也ye3后hou4多duo1而er2与yu3开kai1面mian4对dui4方fang1学xue2法fa3如ru2现xian4前qian2所suo3于yu2都dou1起qi3看kan4没mei2小xiao3还hai2天tian1把ba3好hao3里li3那na4头tou2力li4老lao3高gao1实shi2点dian3去qu4心xin1工gong1本ben3长chang2东dong1些xie1明ming2已yi3各ge4从cong2意yi4应ying1但dan4它ta1家jia1名ming2因yin1间jian1样yang4手shou3接jie1正zheng4文wen2二er4相xiang1新xin1几ji3同tong2体ti3等deng3作zuo4当dang1被bei4比bi3政zheng4月yue4身shen1水shui3女nv3三san1用yong4话hua4外wai4主zhu3着zhe5质zhi4平ping2关guan1提ti2公gong1活huo2通tong1山shan1入ru4眼yan3少shao3气qi4保bao3军jun1十shi2产chan3边bian1度du4万wan4往wang3只zhi3拉la1写xie3管guan3谁shei2先xian1达da2知zhi1教jiao4常chang2场chang3金jin1数shu4任ren4连lian2根gen1认ren4战zhan4离li2带dai4至zhi4华hua2量liang4交jiao1求qiu2权quan2准zhun3利li4门men2每mei3整zheng3采cai3增zeng1回hui2步bu4服fu2花hua1火huo3选xuan3示shi4容rong2清qing1极ji2类lei4收shou1指zhi3算suan4改gai3更geng4半ban4领ling3列lie4感gan3必bi4够gou4号hao4共gong4节jie2句ju4完wan2治zhi4加jia1集ji2标biao1委wei3转zhuan3社she4精jing1提ti2术shu4争zheng1合he2策ce4传chuan2八ba1风feng1近jin4米mi3青qing1张zhang1流liu2准zhun3军jun1层ceng2压ya1解jie3组zu3红hong2约yue1省sheng3讲jiang3按an4养yang3越yue4制zhi4光guang1感gan3亲qin1观guan1给gei3落luo4响xiang3众zhong4济ji4施shi1况kuang4般ban1适shi4兵bing1够gou4打da3便bian4称cheng1千qian1速su4存cun2候hou4配pei4温wen1决jue2精jing1该gai1太tai4府fu3果guo3压ya1划hua4认ren4际ji4联lian2格ge2帮bang1星星biao1表biao3风feng1究jiu1随sui2类lei4备bei4石shi2委wei3县xian4务wu4程cheng2参can1师shi1历li4界jie4周zhou1安安站zhan4建jian4形xing2份fen4声sheng1百bai3处chu4克ke4布bu4放fang4存cun2阿a1满man3其qi2业ye4才cai2思si1春chun1含han2科ke1示shi4北bei3德de2定ding4族zu2代dai4划hua4需xu1究jiu1技ji4选xuan3富fu4约yue1制zhi4块kuai4商shang1深shen1纪ji4规gui1委wei3致zhi4县xian4组zu3革ge2证zheng4受shou4导dao3备bei4安安来lai2身shen1干gan4两liang3南nan2觉jue2马ma3田tian2较jiao4该gai1步bu4按an4密mi4基ji1留liu2被bei4企qi3据ju4是shi4非fei1近jin4建jian4走zou3想xiang3土tu3她ta1特te4识shi2引yin3势shi4言yan2局ju2福fu2斯si1管guan3练lian4积ji1包bao1形xing2品pin3花hua1比bi3元yuan2总zong3传chuan2及ji2苏su1林lin2维wei2真zhen1社she4加jia1特te4清qing1记ji4着zhe5习xi2月yue4况kuang4应ying1严yan2律lv4终zhong1为wei4问wen4战zhan4写xie3大da4北bei3质zhi4界jie4系xi4举ju3首shou3干gan4包bao1次ci4取qu3克ke4复fu4个ge4长chang2信xin4吧ba5白bai2条tiao2色se4放fang4推tui1期qi1运yun4提ti2两liang3第di4且qie3口kou3儿er2千qian1采cai3社she4称cheng1查cha2格ge2德de2济ji4际ji4容rong2八ba1究jiu1适shi4结jie2众zhong4据ju4取qu3交jiao1终zhong1给gei3变bian4广guang3布bu4拉la1义yi4话hua4计ji4极ji2立li4达da2道dao4其qi2劳lao2验yan4家jia1持chi2导dao3将jiang1权quan2团tuan2温wen1准zhun3划hua4及ji2位wei4选xuan3运yun4太tai4干gan4增zeng1象xiang4育yu4再zai4战zhan4至zhi4格ge2号hao4当dang1队dui4适shi4什shen2线xian4低di1真zhen1张zhang1色se4基ji1根gen1走zou3据ju4证zheng4除chu2段duan4究jiu1院yuan4导dao3委wei3决jue2拉la1很hen3始shi3示shi4热re4红hong2节jie2变bian4按an4计ji4府fu3造zao4马ma3空空原yuan2查cha2往wang3转zhuan3指zhi3况kuang4五wu3音yin1律lv4林lin2价jia4步bu4声sheng1越yue4南nan2容rong2形xing2快kuai4技ji4角jiao3写xie3尔er3推tui1光guang1道dao4百bai3台tai2件jian4石shi2难nan2般ban1象xiang4许xu3受shou4求qiu2走zou3低di1情qing2率lv4治zhi4年nian2色se4据ju4称cheng1厂chang3布bu4委wei3传chuan2决jue2也ye3毛mao2想xiang3完wan2组zu3十shi2被bei4段duan4活huo2科ke1属shu3空kong1边bian1量liang4级ji2白bai2织zhi1推tui1候hou4主zhu3把ba3它ta1元yuan2增zeng1便bian4了le4完wan2土tu3示shi4经jing1容rong2算suan4第di4八ba1入ru4马ma3周zhou1光guang1白bai2运yun4东dong1表biao3许xu3整zheng3需xu1往wang3理li3广guang3老lao3向xiang4志zhi4率lv4指zhi3省sheng3满man3算suan4民min2认ren4县xian4重zhong4十shi2千qian1团tuan2致zhi4强qiang2展zhan3完wan2江jiang1法fa3公gong1改gai3示shi4保bao3手shou3究jiu1例li4增zeng1精jing1劳lao2号hao4程cheng2向xiang4区qu1儿er2更geng4西xi1件jian4技ji4信xin4克ke4运yun4育yu4值zhi2义yi4市shi4算suan4改gai3际ji4近jin4专zhuan1引yin3数shu4广guang3无wu2海hai3完wan2民min2斯si1立li4直zhi2受shou4许xu3需xu1形xing2数shu4研yan2取qu3论lun4报bao4该gai1月yue4对dui4团tuan2世shi4速su4如ru2山shan1很hen3立li4向xiang4强qiang2目mu4造zao4传chuan2光guang1万wan4须xu1书shu1带dai4思si1斯si1有you3究jiu1持chi2文wen2速su4好hao3处chu4年nian2增zeng1经jing1提ti2区qu1然ran2教jiao4切qie4况kuang4交jiao1知zhi1计ji4造zao4色se4全quan2查cha2亚ya4容rong2深shen1个ge4克ke4持chi2争zheng1气qi4什shen2收shou1备bei4推tui1拉la1往wang3导dao3边bian1计ji4况kuang4八ba1知zhi1增zeng1省sheng3计ji4列lie4场chang3查cha2组zu3约yue1属shu3力li4受shou4求qiu2没mei2求qiu2度du4指zhi3意yi4石shi2放fang4需xu1权quan2势shi4听ting1指zhi3立li4清qing1许xu3际ji4拉la1通tong1低di1思si1西xi1多duo1拉la1拉la1据ju4完wan2利li4口kou3统tong3告gao4离li2包bao1导dao3书shu1解jie3列lie4实shi2西xi1采cai3领ling3调diao4集ji2接jie1结jie2好hao3府fu3改gai3南nan2方fang1清qing1认ren4省sheng3引yin3石shi2局ju2深shen1收shou1何he2装zhuang1全quan2并bing4山shan1采cai3义yi4程cheng2低di1采cai3中zhong1八ba1受shou4据ju4认ren4安安题ti2实shi2华hua2感gan3深shen1进jin4治zhi4气qi4运yun4广guang3万wan4速su4边bian1族zu2例li4拉la1联lian2党dang3达da2业ye4深shen1合he2两liang3相xiang1准zhun3看kan4色se4复fu4养yang3运yun4共gong4究jiu1往wang3术shu4称cheng1叫jiao4建jian4导dao3感gan3系xi4际ji4改gai3万wan4广guang3太tai4原yuan2展zhan3八ba1步bu4保bao3件jian4程cheng2觉jue2军jun1织zhi1己ji3据ju4党dang3易yi4非fei1治zhi4品pin3治zhi4持chi2消xiao1解jie3传chuan2委wei3精jing1象xiang4转zhuan3达da2林lin2向xiang4仍reng2间jian1层ceng2党dang3党dang3究jiu1至zhi4联lian2号hao4造zao4他ta1增zeng1处chu4步bu4究jiu1住zhu4确que4它ta1县xian4指zhi3万wan4流liu2角jiao3具ju4群qun2西xi1度du4必bi4该gai1白bai2八ba1构gou4讲jiang3业ye4需xu1元yuan2完wan2半ban4制zhi4指zhi3军jun1指zhi3满man3下xia4争zheng1光guang1向xiang4权quan2格ge2际ji4让rang4复fu4实shi2决jue2决jue2头tou2必bi4干gan4拉la1无wu2还hai2二er4打da3备bei4入ru4值zhi2证zheng4书shu1道dao4拉la1确que4导dao3组zu3何he2论lun4备bei4指zhi3知zhi1较jiao4行xing2立li4风feng1年nian2育yu4格ge2究jiu1立li4二er4落luo4运yun4界jie4清qing1需xu1内nei4称cheng1立li4向xiang4长chang2长chang2长chang2处chu4党dang3再zai4少shao3况kuang4传chuan2华hua2品pin3争zheng1五wu3清qing1受shou4品pin3金jin1白bai2再zai4明ming2积ji1叫jiao4区qu1常chang2取qu3团tuan2复fu4领ling3商shang1行xing2单dan1斗dou4度du4府fu3家jia1精jing1具ju4战zhan4量liang4什shen2题ti2行xing2利li4给gei3治zhi4性xing4往wang3空kong1做zuo4处chu4及ji2及ji2极ji2八ba1个ge4何he2指zhi3影ying3形xing2进jin4条tiao2完wan2己ji3元yuan2其qi2些xie1给gei3很hen3习xi2完wan2义yi4程cheng2究jiu1力li4承cheng2取qu3出chu1而er2今jin1得de2导dao3题ti2体ti3共gong4和he2共gong4力li4活huo2有you3现xian4老lao3最zui4色se4高gao1越yue4据ju4都dou1明ming2么me5场chang3组zu3完wan2最zui4今jin1总zong3大da4广guang3领ling3查cha2点dian3事shi4科ke1军jun1列lie4向xiang4种zhong3群qun2党dang3直zhi2运yun4习xi2向xiang4通tong1清qing1者zhe3则ze2目mu4却que4些xie1统tong3最zui4长chang2强qiang2意yi4战zhan4调tiao2题ti2求qiu2转zhuan3变bian4处chu4派pai4放fang4及ji2拿na2事shi4非fei1府fu3改gai3改gai3设she4拉la1干gan4它ta1四si4光guang1际ji4型xing2目mu4明ming2所suo3常chang2据ju4次ci4通tong1最zui4向xiang4区qu1西xi1带dai4很hen3保bao3准zhun3达da2府fu3合he2才cai2线xian4满man3感gan3型xing2究jiu1向xiang4标biao1指zhi3劳lao2华hua2采cai3放fang4该gai1教jiao4管guan3类lei4什shen2特te4走zou3目mu4明ming2变bian4路lu4至zhi4队dui4定ding4市shi4取qu3规gui1研yan2品pin3期qi1和he2外wai4照zhao4结jie2传chuan2米mi3几ji3道dao4越yue4直zhi2计ji4转zhuan3济ji4解jie3确que4并bing4完wan2总zong3持chi2示shi4活huo2利li4与yu3管guan3完wan2志zhi4共gong4防fang2物wu4委wei3究jiu1道dao4志zhi4等deng3东dong1完wan2色se4实shi2因yin1选xuan3少shao3场chang3质zhi4接jie1改gai3北bei3住zhu4声sheng1究jiu1代dai4色se4书shu1感gan3万wan4实shi2老lao3切qie4色se4长chang2品pin3带dai4白bai2界jie4认ren4例li4院yuan4精jing1华hua2规gui1导dao3增zeng1名ming2按an4规gui1至zhi4两liang3声sheng1越yue4外wai4保bao3组zu3从cong2六liu4走zou3越yue4流liu2家jia1图tu2值zhi2打da3各ge4型xing2东dong1管guan3提ti2斯si1结jie2收shou1究jiu1前qian2立li4今jin1象xiang4济ji4大da4她ta1度du4志zhi4委wei3许xu3目mu4品pin3力li4白bai2什shen2海hai3果guo3究jiu1联lian2即ji2很hen3制zhi4求qiu2活huo2经jing1究jiu1严yan2近jin4达da2电dian4类lei4情qing2无wu2线xian4色se4关guan1马ma3过guo4转zhuan3报bao4委wei3区qu1产chan3解jie3完wan2保bao3节jie2张zhang1受shou4律lv4问wen4度du4拉la1况kuang4士shi4党dang3看kan4敌di2系xi4者zhe3极ji2再zai4打da3易yi4改gai3立li4区qu1色se4形xing2土tu3求qiu2真zhen1引yin3即ji2少shao3更geng4才cai2完wan2位wei4完wan2造zao4消xiao1列lie4国guo2变bian4原yuan2长chang2明ming2南nan2设she4府fu3光guang1头tou2拉la1强qiang2少shao3看kan4切qie4度du4都dou1完wan2光guang1却que4育yu4安安很hen3元yuan2体ti3容rong2指zhi3规gui1制zhi4形xing2入ru4立li4处chu4造zao4石shi2参can1成cheng2各ge4究jiu1常chang2总zong3完wan2党dang3站zhan4科ke1代dai4子zi5提ti2究jiu1科ke1究jiu1法fa3组zu3设she4完wan2究jiu1快kuai4交jiao1书shu1维wei2光guang1长chang2克ke4什shen2许xu3对dui4导dao3元yuan2石shi2何he2代dai4治zhi4认ren4据ju4量liang4完wan2光guang1交jiao1干gan4增zeng1";
+var _pinyinMap=null;
+function _buildPinyinMap(){
+  if(_pinyinMap)return _pinyinMap;
+  _pinyinMap=new Map();
+  var i=0,len=_PY_DATA.length;
+  while(i<len){
+    var ch=_PY_DATA.charAt(i);
+    if(/[\u4e00-\u9fff]/.test(ch)){
+      i++;var py='';
+      while(i<len&&!/[\u4e00-\u9fff]/.test(_PY_DATA.charAt(i))){
+        py+=_PY_DATA.charAt(i);i++;
+      }
+      // ★ 防御：拼音须匹配 "小写字母+数字声调"（如 ni3 hao3），过滤格式损坏段
+      if(py&&/^[a-z]+[1-5]$/.test(py))_pinyinMap.set(ch,py);
+    }else{i++;}
+  }
+  return _pinyinMap;
+}
+function _hanziToPinyin(text){
+  if(!text)return'';
+  var m=_buildPinyinMap(),out=[];
+  for(var i=0;i<text.length;i++){
+    var ch=text.charAt(i);
+    if(/[\u4e00-\u9fff]/.test(ch)){
+      var py=m.get(ch);out.push(py||ch);
+    }else{out.push(ch);}
+  }
+  return out.join(' ');
+}
+
+
 function _meSpeakSpeak(args){
   return new Promise(function(resolve,reject){
     try{
       var text=args.text||'';
+      // ★ meSpeak 中文语音只支持拼音(如 ni3 hao3)，不支持直接朗读汉字
+      var lang=args.lang||'auto';
+      // ★ 防御性检查：正常路径上 toolSpeechTTS 已先转拼音，此处只拦截绕过 toolSpeechTTS 的直接调用
+      if(/[\u4e00-\u9fff]/.test(text)&&(lang==='zh'||lang==='zh-CN'||lang==='auto')){
+        if(!/[a-z][0-9]/.test(text)){ // 不含拼音声调标记=纯汉字
+          reject(new Error('meSpeak中文只支持拼音(如 ni3 hao3)，不支持直接读汉字。请用 speechSynthesis 或传入拼音'));
+          return;
+        }
+      }
       var rate=args.rate||150;var pitch=args.pitch||1;var amp=args.amplitude||100;
       var options={amplitude:Math.min(200,Math.max(0,amp)),wordgap:0,pitch:Math.min(2,Math.max(0.5,pitch)),speed:Math.min(450,Math.max(80,rate)),variant:args.variant||''};
-      var wavBase64;try{wavBase64=meSpeak.speak(text,options);}catch(e2){reject(new Error('meSpeak合成失败: '+e2.message));return;}
-      if(!wavBase64||typeof wavBase64!=='string'||wavBase64.length<20){reject(new Error('meSpeak返回空数据'));return;}
-      var binStr=atob(wavBase64);
-      var wavBuf=new ArrayBuffer(binStr.length);
-      var wavView=new Uint8Array(wavBuf);
-      for(var bi=0;bi<binStr.length;bi++)wavView[bi]=binStr.charCodeAt(bi);
+      var wavResult;try{wavResult=meSpeak.speak(text,options);}catch(e2){reject(new Error('meSpeak合成失败: '+e2.message));return;}
+      // meSpeak v1.9.6 Web Audio 模式下 speak() 直接播放，返回 true/ArrayBuffer，不返回 base64 字符串
+      if(!wavResult){reject(new Error('meSpeak返回空数据'));return;}
+      var wavBuf,wavView;
+      if(typeof wavResult==='string'&&wavResult.length>=20){
+        // base64 字符串模式
+        var binStr=atob(wavResult);
+        wavBuf=new ArrayBuffer(binStr.length);
+        wavView=new Uint8Array(wavBuf);
+        for(var bi=0;bi<binStr.length;bi++)wavView[bi]=binStr.charCodeAt(bi);
+      }else if(wavResult instanceof ArrayBuffer){
+        wavBuf=wavResult;
+        wavView=new Uint8Array(wavBuf);
+      }else if(wavResult instanceof Uint8Array){
+        wavBuf=wavResult.buffer;
+        wavView=wavResult;
+      }else{
+        // Web Audio 直接播放模式（speak 返回 true 等）→ 已由 meSpeak 内部播放完毕
+        debugLogger.info('meSpeak 直接播放模式,返回值类型='+(typeof wavResult));
+        resolve('directPlay');
+        return;
+      }
       // 使用全局 AudioContext（已被 mic 按钮点击激活）而非每次新建
       var ctx=_audioCtx;
       if(!ctx){
@@ -11440,19 +11810,79 @@ async function toolSpeechTTS(args){
   var action=args.action||'speak';
 
   if(action==='list_voices'){
-    await _ensureMeSpeak();
-    return ' meSpeak.js (eSpeak WASM) | 支持: zh(中文拼音) en(英语) ja(日语) ko(韩语) de(德语) fr(法语) es(西班牙语)...共50+语言\n 全平台兼容(含Android WebView/iOS) 无需联网';
+    var voicesInfo=' TTS 引擎:\n';
+    // —— 浏览器原生 speechSynthesis ——
+    if(window.speechSynthesis){
+      voicesInfo+='1. 浏览器SpeechSynthesis (原生): ';
+      var voices=window.speechSynthesis.getVoices();
+      if(voices.length===0){
+        voicesInfo+='(语音列表尚未加载，请稍后重试。Chrome for Android 支持汉字直接朗读)\n';
+      }else{
+        var zhVs=voices.filter(function(v){return v.lang.indexOf('zh')===0||v.lang.indexOf('cmn')===0;});
+        voicesInfo+='共'+voices.length+'个语音, 中文'+zhVs.length+'个\n';
+        for(var vi=0;vi<Math.min(zhVs.length,5);vi++){
+          voicesInfo+='  - '+zhVs[vi].name+' ('+zhVs[vi].lang+') '+(zhVs[vi].localService?'本地':'云端')+'\n';
+        }
+      }
+    }else{voicesInfo+='1. 浏览器SpeechSynthesis: 不支持\n';}
+    // —— meSpeak 离线引擎 ——
+    try{
+      await _ensureMeSpeak();
+      voicesInfo+='2. meSpeak.js (离线WASM): zh(拼音) en ja ko de fr es... 50+语言 | 全平台兼容,无需联网\n';
+    }catch(e){voicesInfo+='2. meSpeak.js: 未加载('+e.message+')\n';}
+    return voicesInfo;
   }
 
-  if(action==='stop'){_ttsAborted=true;return ' 语音已停止。';}
+  if(action==='stop'){
+    _ttsAborted=true;
+    if(window.speechSynthesis)window.speechSynthesis.cancel();
+    return ' 语音已停止。';
+  }
 
   var text=args.text||'';
   if(!text.trim())return '请指定要朗读的 text';
   _ttsAborted=false;
-  await _ensureMeSpeak();
 
   var lang=args.lang||'auto';
-  if(lang==='auto')lang=/([\u4e00-\u9fff])/.test(text)?'zh':'en';
+  if(lang==='auto')lang=/([\u4e00-\u9fff])/.test(text)?'zh-CN':'en';
+
+  var hasHanzi=/([\u4e00-\u9fff])/.test(text);
+
+  // ★ 策略1: 优先使用浏览器原生 speechSynthesis（Android Chrome 可用，支持汉字直接朗读）
+  if(window.speechSynthesis&&(hasHanzi||lang.indexOf('zh')===0||lang==='en')){
+    try{
+      var utter=new SpeechSynthesisUtterance(text);
+      utter.lang=lang;
+      utter.rate=(args.rate||150)/175; // speechSynthesis rate 是 0.1~10
+      utter.pitch=args.pitch||1;
+      utter.volume=(args.amplitude||100)/100;
+      await new Promise(function(resolve,reject){
+        var done=false;
+        var safetyTimer=setTimeout(function(){done=true;resolve('ok');},Math.max(15000,text.length*80+5000));
+        utter.onend=function(){if(!done){done=true;clearTimeout(safetyTimer);resolve('ok');}};
+        utter.onerror=function(e){if(!done){done=true;clearTimeout(safetyTimer);reject(new Error(e.error||'speechSynthesis错误'));}};
+        window.speechSynthesis.speak(utter);
+      });
+      return ' SpeechSynthesis TTS: 已朗读 | 语言:'+lang+' | 共'+text.length+'字\n 可通过 speech_tts action="stop" 中断朗读';
+    }catch(se){
+      debugLogger.warn('speechSynthesis失败，降级到meSpeak: '+se.message);
+      if(window.speechSynthesis)window.speechSynthesis.cancel();
+      // 继续往下走 meSpeak
+    }
+  }
+
+  // ★ 策略2: 降级到 meSpeak 离线引擎 — 自动将汉字转为拼音
+  await _ensureMeSpeak();
+  if(hasHanzi&&(lang==='zh'||lang==='zh-CN')){
+    // 自动转换汉字→拼音
+    var pinyinText=_hanziToPinyin(text);
+    if(!pinyinText||pinyinText===text){
+      var reason=!pinyinText?'转换结果为空（输入可能全为标点/空白）':'内置拼音表未覆盖该汉字';
+      return ' 中文汉字无法用meSpeak朗读: '+reason+'。请手动提供拼音文本或改用英文朗读。';
+    }
+    debugLogger.info('meSpeak 汉字→拼音自动转换: '+text.substring(0,20)+' → '+pinyinText.substring(0,40));
+    text=pinyinText;
+  }
 
   var maxChunk=300;var chunks=[];
   if(text.length<=maxChunk){chunks=[text];}
@@ -11553,7 +11983,7 @@ async function toolSpeechSTT(args){
   var sttEndpoint=settings.stt_endpoint||args.stt_endpoint||'';
   if(!sttEndpoint){
     _sttActive=false;
-    return '';
+    return ' 浏览器不支持内置语音识别，且未配置STT端点。请在设置→语音中填写STT API端点(如本地Whisper服务的 http://host:port/v1/audio/transcriptions)，或使用Chrome/Edge桌面版。';
   }
 
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
@@ -11600,20 +12030,21 @@ async function toolSpeechSTT(args){
 var _calendarPath='/config/calendar.json';
 
 async function _loadCalendar(){
-  var raw=null;
-  try{raw=await readFile(_calendarPath);}catch(e){}
-  if(raw){try{return JSON.parse(raw);}catch(e){}}
+  try{
+    var raw=await readFile(_calendarPath);
+    if(raw){var parsed=JSON.parse(raw);if(parsed&&parsed.events)return parsed;}
+  }catch(e){}
   return {events:[],updatedAt:0};
 }
 
 async function _saveCalendar(cal){
   cal.updatedAt=Date.now();
   try{
-    var exist=await readFile(_calendarPath);
     var json=JSON.stringify(cal,null,2);
-    if(exist!==null)await updateFile(_calendarPath,json);
+    var meta=await getFileMeta(_calendarPath);
+    if(meta)await updateFile(_calendarPath,json);
     else await createFile(_calendarPath,json);
-  }catch(e){}
+  }catch(e){debugLogger.warn('日历保存失败: '+e.message);}
 }
 
 function _eventId(){return 'evt_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);}
@@ -13657,7 +14088,7 @@ async function toolSqlDb(args){
     try{
       var tables=[];
       var stmt2=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
-      while(stmt2.step()){var tVals=stmt2.get();var tName=tVals[0];var cols=[];var cs=db.prepare("PRAGMA table_info('"+tName+"')");var pragmaCols=cs.getColumnNames();while(cs.step()){var ci=cs.get();var ciObj={};for(var pc=0;pc<pragmaCols.length;pc++)ciObj[pragmaCols[pc]]=ci[pc];cols.push({name:ciObj.name,type:ciObj.type,pk:!!ciObj.pk,notNull:!!ciObj.notnull,default:ciObj.dflt_value});}cs.free();tables.push({table:tName,columns:cols,rowCount:_countTable(db,tName)});}
+      while(stmt2.step()){var tVals=stmt2.get();var tName=tVals[0];var cols=[];var cs=db.prepare("PRAGMA table_info('"+tName.replace(/'/g,"''")+"')");var pragmaCols=cs.getColumnNames();while(cs.step()){var ci=cs.get();var ciObj={};for(var pc=0;pc<pragmaCols.length;pc++)ciObj[pragmaCols[pc]]=ci[pc];cols.push({name:ciObj.name,type:ciObj.type,pk:!!ciObj.pk,notNull:!!ciObj.notnull,default:ciObj.dflt_value});}cs.free();tables.push({table:tName,columns:cols,rowCount:_countTable(db,tName)});}
       stmt2.free();
       if(!tables.length)return ' 数据库为空，尚无表。使用 create_table 建表或 exec 执行 CREATE TABLE。';
       return JSON.stringify(tables,null,2);
@@ -14296,6 +14727,7 @@ function buildSystemPromptWithSkills(role){
       if(skillCache.activeSkillIds.indexOf(sid)>=0){
         skillBlock+='\\n## '+(sk.name||skillKeys[i])+'\\n'+sk.prompt_fragment;
         injectedCount++;
+        recordSkillUsage(sid,true).catch(function(){});
       }
     }
     if(injectedCount>0)parts.push(skillBlock);
@@ -15938,7 +16370,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
 
     // 通知进化Worker任务成功
     if(evoWorker&&taskId){
-      try{evoWorker.postMessage({type:'task_success',payload:{taskId:taskId}});}catch(e){}
+      try{evoWorker.postMessage({type:'task_success',payload:{taskId:taskId,relevantSkills:skillCache.activeSkillIds||[],summary:(agentContent||'').substring(0,200)}});}catch(e){}
     }
 
     setStatus('idle');
@@ -15960,7 +16392,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
       setStatus('error');
       errorHandler.handle({code:'API_NETWORK',message:error.message},'processUserMessage');
       if(evoWorker&&taskId){
-        evoWorker.postMessage({type:'task_failure',payload:{taskId:taskId,error:error.message}});
+        evoWorker.postMessage({type:'task_failure',payload:{taskId:taskId,errorType:error.name||'Error',relevantSkills:skillCache.activeSkillIds||[],summary:error.message.substring(0,200)}});
       }
     }
   }
@@ -17904,9 +18336,10 @@ function startHeartbeat(){
     if(evoWorker){
       try{
         var stats=getBudgetStats();
+        var lastMsg=shortTermMemory.entries.length>0?shortTermMemory.entries[shortTermMemory.entries.length-1].ts:0;
         evoWorker.postMessage({
           type:'heartbeat',
-          payload:{budget_remaining:stats.evoAvailable,total:stats.total,interrupt:isProcessing,timestamp:Date.now()}
+          payload:{budget_remaining:stats.evoAvailable,total:stats.total,interrupt:isProcessing,timestamp:Date.now(),last_activity:lastMsg}
         });
       }catch(e){debugLogger.warn('心跳失败: '+e.message);}
     }
@@ -17922,7 +18355,6 @@ function startHealthCheck(){
         try{
           evoAlive=await new Promise(function(resolve){
             var checkId='evo_health_'+Date.now();
-            var timeout=setTimeout(function(){resolve(false);},5000);
             var handler=function(e){
               if(e.data&&e.data.type==='health_check_reply'&&e.data.replyTo===checkId){
                 clearTimeout(timeout);
@@ -17930,6 +18362,10 @@ function startHealthCheck(){
                 resolve(true);
               }
             };
+            var timeout=setTimeout(function(){
+              evoWorker.removeEventListener('message',handler);
+              resolve(false);
+            },5000);
             evoWorker.addEventListener('message',handler);
             evoWorker.postMessage({id:checkId,type:'health_check',payload:{}});
           });
@@ -17939,6 +18375,7 @@ function startHealthCheck(){
           if(evoWorkerManager)evoWorkerManager.handleCrash();
         }
       }
+
       if(taskWorker){
         try{
           var taskAlive=await sendToTaskWorker('health_check',{},5000);
@@ -18058,7 +18495,7 @@ function initEventBindings(){
       settingsDrawer.classList.add('open');
       overlay.style.display='block';
       overlay.classList.add('show');
-      settingsDrawer.setAttribute('aria-hidden','false');
+      settingsDrawer.setAttribute('aria-hidden','false');settingsDrawer.removeAttribute('inert');
       renderKBList();
       renderMemList();
     });
@@ -18070,7 +18507,7 @@ function initEventBindings(){
     if(settingsDrawer)settingsDrawer.classList.remove('open');
     if(overlay){overlay.classList.remove('show');
       setTimeout(function(){overlay.style.display='none';},300);}
-    settingsDrawer.setAttribute('aria-hidden','true');
+    settingsDrawer.setAttribute('aria-hidden','true');settingsDrawer.setAttribute('inert','');
   }
 
   // 保存设置
@@ -19876,8 +20313,8 @@ function formatTime(ts){
   return (d.getMonth()+1)+'/'+d.getDate();
 }
 
-function openSidebar(){document.getElementById('conversationSidebar').classList.add('open');document.getElementById('sidebarOverlay').classList.add('show');}
-function closeSidebar(){document.getElementById('conversationSidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('show');}
+function openSidebar(){var s=document.getElementById('conversationSidebar');s.classList.add('open');s.setAttribute('aria-hidden','false');s.removeAttribute('inert');document.getElementById('sidebarOverlay').classList.add('show');}
+function closeSidebar(){var s=document.getElementById('conversationSidebar');s.classList.remove('open');s.setAttribute('aria-hidden','true');s.setAttribute('inert','');document.getElementById('sidebarOverlay').classList.remove('show');}
 
 function newConversation(){
   // 【多对话并行】当前对话内容搬入 _container
