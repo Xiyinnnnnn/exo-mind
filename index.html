@@ -1228,7 +1228,7 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'  ▸ P4 起草并自检 — 逐块产出。每块过 □：\n'
 +'    □ 缺概念需补？□ 有漏洞或绝对化？□ 分清了必须做/建议做？□ 可操作？\n'
 +'    [MUST] 发现问题→当场修正→标注修正\n'
-+'    [MUST] 新建→filesystem create→code_run→read确认 | 改现有→先filesystem copy备份(.bak)→再改→code_run→exitCode≠0→copy备份覆盖回滚→read确认\n'
++'    [MUST] 新建→filesystem create→code_run→read确认 | 改现有→先filesystem copy备份(.v{N}.bak，N从1递增，首次.v1.bak)→再改→code_run→exitCode≠0→copy最新备份(.v{N}.bak)覆盖回滚→read确认 | 多次迭代保留全版本链(.v1.bak,.v2.bak,.v3.bak...)，回滚时可选择任意历史版本\n'
 +'  ▸ P5 润色 — 通读+修冗余+验递进+确无矛盾\n'
 +'[MUST] 交付格式（写入<answer>内，用户可见）：\n'
 +'  ▸ P6 交付 — 一句核心原则开头→清单式正文→常见误区收尾\n'
@@ -1236,11 +1236,12 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'[MUST] 不得跳过任一阶段。P4自检未过→不回退。缺信息→回P2搜索。\n'
 +'[MUST_NOT] <answer>内容不得含思考步骤、不得为草稿。必须是可直接使用的终版。\n'
 +'[MUST_NOT] 严禁在<think>标签外输出▸P1-▸P5格式的思考文本。\n'
-+'[MUST_NOT] 无备份直接覆写/行编辑已有文件。\n\n'
++'[MUST_NOT] 无备份直接覆写/行编辑已有文件。不得覆盖或删除历史备份(.vN.bak)，仅回滚时可读取。\n\n'
 +'[DELIVER] 交付前逐项核对(缺一项不交付，回[THINK]继续)：\n'
 +'  □ 记忆已查 — longterm_memory query 已执行\n'
 +'  □ 知识已查 — knowledge_base query 已执行\n'
 +'  □ 代码已跑通 — code_run返回exitCode:0\n'
++'  □ 备份已留 — 修改前已copy .v{N}.bak版本备份\n'
 +'  □ 文件已验证 — read确认内容正确\n'
 +'  □ 数据已核实 — search/calculator一致性确认\n'
 +'  □ 问题已回答 — 逐条回顾用户意图无遗漏\n'
@@ -1275,6 +1276,7 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'  →filesystem create /d/weather-server/index.js\n'
 +'  →filesystem code_run /d/weather-server/index.js → exitCode:0 | 端点200\n'
 +'  [AgentB] □移动端适配? →补responsive □预警阈值可配? →补config.js\n'
++'  →filesystem copy /d/weather-client/index.html /d/weather-client/index.v1.bak\n'
 +'  →filesystem create /d/weather-client/index.html\n'
 +'  →filesystem code_run(静态) → 渲染正常\n'
 +'（监工接管→逐条验证→干活Agent执行→可选pipeline并行编排独立条目）\n'
@@ -1284,7 +1286,7 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'→longterm_memory store "天气Dashboard架构:Open-Meteo+express缓存+Chart.js多城对比" topic=weather-dashboard\n'
 +'\n'
 +'▸ P5 润色 — 通读全链路→修"温度单位"前后不一致(一处F一处C)→统一为C→验递进\n'
-+'[DELIVER] □代码已跑通 □文件已验证 □数据已核实 □问题已回答 □路径已告知\n'
++'[DELIVER] □代码已跑通 □备份已留 □文件已验证 □数据已核实 □问题已回答 □路径已告知\n'
 +'</think>\n'
 +'\n'
 +'<answer>\n'
@@ -1303,6 +1305,7 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'## 3. 文件清单\n'
 +'- /d/weather-server/index.js — Express后端+缓存\n'
 +'- /d/weather-client/index.html — 完整Dashboard\n'
++'- /d/weather-client/index.v1.bak — 修改前版本备份，可回滚\n'
 +'- /d/weather_pipeline.json — Pipeline DAG定义（可选，并行编排时生成）\n'
 +'\n'
 +'## 4. 常见问题\n'
@@ -2014,7 +2017,8 @@ var TOOL_REGISTRY={
     parameters:{type:'object',properties:{nodes:{type:'array',items:{type:'object',properties:{id:{type:'string'},label:{type:'string'},color:{type:'string'}}}},edges:{type:'array',items:{type:'object',properties:{from:{type:'string'},to:{type:'string'},label:{type:'string'}}}},options:{type:'object',properties:{height:{type:'string',default:'400px'}}}},required:['nodes','edges']}}
 };
 
-var _SHARED_GRADE='[GRADE:L1] 简单问答\n'
+var _SHARED_GRADE=
+'[GRADE:L1] 简单问答\n'
 +'前·· longterm_memory query→knowledge_base query\n'
 +'  命中→短路复用+标源(mem_xxx/kb_xxx)→回答\n'
 +'  未中→search→calculator→回答\n'
@@ -2024,50 +2028,54 @@ var _SHARED_GRADE='[GRADE:L1] 简单问答\n'
 +'★完成: 有源标源+无源如实+记忆已存\n'
 +'\n'
 +'[GRADE:L2] 单次产出\n'
++'一次做对，不返工。\n'
 +'前·· longterm_memory query→knowledge_base query\n'
-+'  →命中复用模板/同类→确认需求→生产→验证(code_run exitCode:0)→文件归档\n'
++'  →命中复用模板/同类→确认需求→生产→验证(code_run exitCode:0)→read确认→文件归档\n'
++'  改现有→先copy .v{N}.bak备份再改→code_run验证→exitCode≠0回滚\n'
 +'缺口: 缺模板/方法→help list→help set→仍未→邀用户给参考。| 升级: 需多步→L3 | 需对齐→L4\n'
 +'后·· 产出路径→longterm_memory store | 可复用模板→knowledge_base store\n'
-+'□自检: 前··执行？模板/同类查了？exitCode:0？filesystem create了？read验证？后··执行？\n'
-+'★完成: 文件已写+运行通过+read确认+记忆已存\n'
++'□自检: 前··执行？模板/同类查了？exitCode:0？read验证内容正确？备份已留？后··执行？\n'
++'★完成: 文件已写+运行通过+read确认+备份已留+记忆已存\n'
 +'\n'
 +'[GRADE:L3] 多步验证\n'
++'这是使用最多的等级。任务拆开，每步验证，高级特性全开，多轮修正直到通过。\n'
 +'前·· longterm_memory query→knowledge_base query→复用经验/已知约束\n'
-+'  →todo create拆子步(逐条标depends_on)→逐步执行(每步exitCode:0才下步)\n'
-+'  →search/API补外数据→calculator精算→code_run→filesystem read确认→组装→一致性检查→交付\n'
-+'触发: ≥3步→flow_mode | 选方案→mcts_plan fast | 独立并行→pipeline create\n'
-+'缺口: 某步缺数据→search/API | 缺工具→help set→仍未→手动替代+store标记"工具缺" | 知识盲区→标清+邀输入 | 升级: 多模块依赖→L4\n'
-+'后·· longterm_memory store(步骤链+关键决策+缺口) | knowledge_base store(可复用子方案)\n'
-+'□自检: todo每步done有evidence？步间依赖正确？外数据已核实？一致性无矛盾？后··执行？\n'
-+'★完成: todo全done+全步通过+一致性通过+记忆已存\n'
++'  →todo create拆子步(逐条标depends_on)→flow_mode start接管→每步S-A-O-C循环:\n'
++'    Spec定目标+验收标准→Action执行工具(search/API/code_run/filesystem/pipeline)→Observe观察exitCode+read内容+数据一致→Correct不通过回Action重来\n'
++'  →calculator精算→reqalign对齐需求(有疑即问)→generatespec生成文档(review≥5)→mcts_plan standard选最优→world_validator仿真→组装→深度一致性检查→交付\n'
++'触发: ≥2步→flow_mode | 选方案→mcts_plan standard | 独立并行→pipeline create | 需求模糊→reqalign | 反复修改>2轮→flow_mode深度纠偏\n'
++'缺口: S-A-O-C未闭环→回Spec重来 | 缺数据→search/API | 缺工具→help set→仍未→手动替代+store标记 | 知识盲区→标清+邀输入 | 仿真未过→回修正 | 升级: spec+多模块+生产部署→L4\n'
++'后·· longterm_memory store(步骤链+S-A-O-C决策+缺口+方案优劣) | knowledge_base store(可复用子方案+generatespec基线)\n'
++'□自检: 每步S-A-O-C闭环？flow_mode接管全链？todo全done有evidence？generatespec≥5 review？mcts决策可追溯？world_validator通过？深度一致性无矛盾？后··执行？\n'
++'★完成: S-A-O-C全步通过+flow_mode全交付+todo全done+generatespec基线+mcts决策+仿真通过+深度一致性+记忆已存\n'
 +'\n'
 +'[GRADE:L4] 项目级\n'
-+'前·· longterm_memory query(项目历史/技术决策)→knowledge_base query(规范/文档)\n'
-+'  →需求模糊→reqalign analyze→submit_questions→用户回答→check_convergence→lock\n'
-+'  →需结构化蓝图→generatespec generate→review≥7→fix→finalize锁定\n'
-+'  →多路径分歧→mcts_plan standard(600sims深度思考)→输出最优路径\n'
-+'  →todo create拆解为可验证条目→逐条标记依赖→flow_mode start\n'
-+'  →监工接管→逐条验证→干活Agent执行\n'
-+'  →独立并行模块→pipeline create DAG(节点+边+验收指标)→run→get_report→decide\n'
-+'  →需仿真→world_validator define→step→run→export验证\n'
-+'  →架构可视化→vis_network→filesystem read确认\n'
-+'  →关键里程碑→calendar schedule auto_wake→全done→flow_deliver\n'
-+'触发: 多模块依赖→todo+flow_mode | 反复修改>2轮→flow_mode | 含并行→pipeline | 需求模糊→reqalign先对齐\n'
-+'缺口: 条目受阻→todo fail+fallback | pipeline节点失败→decide reroute | 全链不可用→降级L3分步+store"L4降级"\n'
++'生产级交付。全部高级特性必用，深度bug必须全部关闭才能交付。\n'
++'前·· longterm_memory query(项目历史/技术决策+反模式)→knowledge_base query(规范/文档)\n'
++'  →reqalign analyze必用(需求模糊即问)→submit_questions→check_convergence→lock锁定\n'
++'  →generatespec generate必用→review≥7→fix→finalize基线锁定\n'
++'  →多路径分歧→mcts_plan standard(600sims)→输出最优路径+备选方案\n'
++'  →todo create拆可验证条目(逐条标依赖+验收标准)→flow_mode start必用\n'
++'  →pipeline create DAG必用(节点+边+验收指标)→run→get_report→decide\n'
++'  →监工接管→每步S-A-O-C+world_validator仿真必用→干活Agent执行\n'
++'  →深度bug修复循环(发现→定位→S-A-O-C修正→回归验证→关闭)→全部关闭才可交付\n'
++'  →vis_network架构可视化→calendar schedule里程碑→全done→flow_deliver\n'
++'触发: 多模块+spec需求→全高级特性必用 | 需求模糊→reqalign先对齐 | 跨模块并行→pipeline+mcts | 深度bug待修→修复循环\n'
++'缺口: 条目受阻→todo fail+fallback | pipeline节点失败→decide reroute+备选方案 | bug未全关→不交付回修正 | 全链不可用→降级L3+store"L4降级"\n'
 +'后·· longterm_memory store(架构决策+缺口+降级记录) | knowledge_base store(规范/spec/模板) | spec已锁定为基线\n'
-+'□自检: reqalign锁定了？spec≥7且finalize？todo全done+evidence一致？pipeline全过？验收达标？后··执行？\n'
-+'★完成: 需求对齐锁定+spec基线化+todo全done+pipeline通过+验收全达标+架构决策已存\n'
++'□自检: reqalign锁定？spec≥7+finalize基线？todo全done+S-A-O-C闭环？pipeline全过+DAG无环？world_validator仿真全过？bug全关闭+回归通过？验收达标？后··执行？\n'
++'★完成: reqalign锁定+spec基线化+todo全done+pipeline通过+仿真全过+bug全关闭+验收全达标+架构决策已存\n'
 +'\n'
 +'[GRADE:L5] 持续改进\n'
-+'触发: 同类反复≥3次→longterm_memory query回顾→定位模式→调整方法→longterm_memory store新法\n'
-+'  或 定时→calendar auto_wake→复盘→改进\n'
-+'触发识别: 本轮P2 query命中≥3条同主题记忆→自动升L5审视\n'
-+'改进环: 回顾(记忆/知识双查→提取成败模式→标注差距)→诊断(定位根因→world_validator what-if量化)→进化(skill_manager查新技能→set激活→A/B验证)→固化(longterm_memory store新法+v2→旧法追加"已被v2替代"+knowledge_base store最佳实践+pipeline create模板化)→循环(calendar schedule定期复盘→下次同类先发预警)\n'
++'超长自主运行，无成本限制。回顾→诊断→进化→固化→循环，自主闭环。\n'
++'触发: 同类≥3次→自主回顾 | 定时calendar auto_wake→自主复盘 | 用户指令→自主启动\n'
++'触发识别: P2 query≥3条同主题→自动升L5 | 用户要求长期自主→直接L5\n'
++'改进环(不限轮次): 回顾(记忆/知识全查→成败模式+差距)→诊断(定位根因→world_validator what-if量化)→进化(skill_manager查新技能→set激活→A/B验证→选最优)→固化(longterm_memory store新法+v2→旧法标记替代+knowledge_base store最佳实践+pipeline模板化)→循环(calendar复盘→下次预警)→自主闭环\n'
 +'缺口: 反复缺口为系统性问题→store标记"已知局限"(category:"能力缺口") | 工具侧缺口→建议用户扩展工具链\n'
 +'注意: skill_manager: query搜索技能/set激活/reset卸载。策略调整靠自己改进。不依赖外部fix。\n'
-+'后·· longterm_memory store(改进方案+v2+效果量化+时间戳)→旧法不删追marker。knowledge_base store(最佳实践+反模式+适用边界) | pipeline模板已存供复用\n'
-+'□自检: 同类记忆≥3条命中？根因可量化？新法A/B验证通过？pipeline模板已固化？日历复盘已排？下次同类可预警？\n'
-+'★完成: longterm_memory已记录新法+知识库沉淀最佳实践+旧法标记替代+日历复盘已排+pipeline模板可复用+下次同类先发预警\n'
++'后·· longterm_memory store(改进方案+v2+效果量化+时间戳)→旧法追marker不删。knowledge_base store(最佳实践+反模式+适用边界) | pipeline模板固化 | generatespec更新\n'
++'□自检: 同类记忆≥3？根因量化可追溯？A/B验证+最优已选？pipeline模板固化？日历复盘已排？预警就绪？自主闭环可持续？\n'
++'★完成: 新法记录+最佳实践沉淀+旧法标记替代+日历已排+pipeline模板固化+预警就绪+自主闭环可持续\n'
 +'\n'
 +'---\n'
 +'### 分级升级/降级信号\n'
@@ -2075,9 +2083,9 @@ var _SHARED_GRADE='[GRADE:L1] 简单问答\n'
 +'|------|---------|--------|---------|--------|\n'
 +'| L1 | 需工具产出 | L2 | — | — |\n'
 +'| L2 | 需多步验证 | L3 | 需求不清→reqalign | L4(先对齐) |\n'
-+'| L3 | 多模块依赖 | L4 | 可简化为单步 | L2 |\n'
-+'| L4 | 全链不可用 | L3(降级) | 对齐后明确简单 | L2 |\n'
-+'| L5 | 同类≥3条记忆 | 自动触发 | — | — |\n'
++'| L3 | spec+多模块+生产部署 | L4 | 可简化为L2单步 | L2 |\n'
++'| L4 | 全链不可用 | L3(降级) | bug全关+明确简单 | L2 |\n'
++'| L5 | 同类≥3条记忆/用户指令 | 自动触发 | 用户要求降成本 | L4 |\n'
 +'[MUST] 升降级在P1拆解后即判定。不准中途降级交付半成品。\n'
 +'[MUST] 降级时store记录原因。下次同类恢复原级。\n'
 +'\n'
@@ -2085,20 +2093,21 @@ var _SHARED_GRADE='[GRADE:L1] 简单问答\n'
 +'### 高级能力索引（按分级调用）\n'
 +'| 能力 | L1 | L2 | L3 | L4 | L5 | 工具 |\n'
 +'|------|:--:|:--:|:--:|:--:|:--:|------|\n'
-+'| 心流深度 | — | — | 可选 | ★必用 | — | flow_mode |\n'
-+'| DAG流水线 | — | — | 可选 | ★推荐 | 模板化 | pipeline |\n'
-+'| 需求对齐 | — | — | — | ★前置 | — | reqalign |\n'
-+'| 开发文档 | — | — | — | ★推荐 | — | generatespec |\n'
-+'| MCTS决策 | — | — | fast | standard | 复盘 | mcts_plan |\n'
-+'| 离散仿真 | — | — | — | 可选 | what-if | world_validator |\n'
-+'| 日历定时 | — | — | — | 里程碑 | ★复盘 | calendar |\n'
-+'| 关系图谱 | — | — | — | 可选 | — | vis_network |\n'
-+'| SQL数据库 | — | — | 可选 | 可选 | — | sql_db |\n'
-+'| 技能管理 | — | — | — | 可选 | ★进化 | skill_manager |\n'
++'| 心流深度 | — | 可选 | ★必用 | ★必用 | ★必用 | flow_mode |\n'
++'| DAG流水线 | — | 可选 | ★推荐 | ★必用 | ★必用 | pipeline |\n'
++'| 需求对齐 | — | — | ★推荐 | ★必用 | ★必用 | reqalign |\n'
++'| 开发文档 | — | — | ★推荐 | ★必用 | ★必用 | generatespec |\n'
++'| MCTS决策 | — | fast | standard | standard | deep | mcts_plan |\n'
++'| 离散仿真 | — | — | ★推荐 | ★必用 | ★必用 | world_validator |\n'
++'| 日历定时 | — | — | 可选 | ★推荐 | ★必用 | calendar |\n'
++'| 关系图谱 | — | — | 可选 | 可选 | — | vis_network |\n'
++'| SQL数据库 | — | — | ★推荐 | ★推荐 | ★推荐 | sql_db |\n'
++'| 技能管理 | — | — | 可选 | ★推荐 | ★必用 | skill_manager |\n'
++'| S-A-O-C规范 | — | — | ★必用 | ★必用 | ★必用 | — |\n'
 +'| 长期记忆 | ★必用 | ★必用 | ★必用 | ★必用 | ★核心 | longterm_memory |\n'
 +'| 知识库 | ★必用 | ★必用 | ★必用 | ★必用 | ★沉淀 | knowledge_base |\n'
-+'| MCP连接 | — | — | 可选 | 可选 | — | mcp_connect |\n'
-+'| 自定义API | — | — | 可选 | 可选 | — | custom_api_call |\n'
++'| MCP连接 | — | — | 可选 | 可选 | 可选 | mcp_connect |\n'
++'| 自定义API | — | — | 可选 | 可选 | 可选 | custom_api_call |\n'
 +'\n'
 +'[TOOL_RESULT] 所有工具结果以 `---tool:工具名 ok|err|empty Nms Nch 类型---` 开头。\n'
 +'  状态: ok=成功 | err=错误(不重试，读错误信息调整参数) | empty=结果为空。\n'
@@ -2107,9 +2116,8 @@ var _SHARED_GRADE='[GRADE:L1] 简单问答\n'
 +'  读取顺序: 状态→类型→内容。大结果(size>30Kch)配合 filesystem read 分段使用。\n';
 
 var _WORKER_GRADE = _SHARED_GRADE
-  .replace('≥3步→flow_mode','≥3步→手动拆步自检')
+  .replace('≥2步→flow_mode','≥2步→手动拆步自检')
   .replace('反复修改>2轮→flow_mode','反复修改>2轮→手动拆步自检');
-
 
 var TOOL_DOCS={
   'help':`## help — 工具目录与动态载入 
@@ -6055,6 +6063,37 @@ var shortTermMemory={
 // ================================================================
 // 第13部分：错误处理
 // ================================================================
+
+// DeepSeek API 错误信息 → 友好中文（UI渲染层过滤）
+var DEEPSEEK_ERROR_KEYWORDS = [
+  { match: /余额不足|Insufficient Balance|insufficient_balance/i,
+    msg: 'API 余额不足，请前往 DeepSeek 平台充值后继续使用' },
+  { match: /Authentication Fails|invalid_api_key|unauthorized|Invalid API Key/i,
+    msg: 'API Key 无效或未填写，请在设置中检查 API Key' },
+  { match: /Invalid Format/i,
+    msg: '请求格式有误，请检查 API 参数设置' },
+  { match: /Invalid Parameters|invalid_param/i,
+    msg: '请求参数无效，请检查模型名称或参数范围' },
+  { match: /Rate Limit|rate_limit/i,
+    msg: '请求频率过高，系统已限流，请稍后再试' },
+  { match: /Server Error|internal_error/i,
+    msg: 'DeepSeek 服务器内部错误，请稍后重试' },
+  { match: /Server Overloaded|overloaded/i,
+    msg: 'DeepSeek 服务器过载，请稍后重试' }
+];
+
+function friendlyAPIErrorMsg(rawMsg) {
+  if (!rawMsg) return rawMsg;
+  for (var i = 0; i < DEEPSEEK_ERROR_KEYWORDS.length; i++) {
+    if (DEEPSEEK_ERROR_KEYWORDS[i].match.test(rawMsg)) {
+      return DEEPSEEK_ERROR_KEYWORDS[i].msg;
+    }
+  }
+  if (typeof rawMsg === 'string' && rawMsg.length > 120) {
+    return rawMsg.substring(0, 120) + '…';
+  }
+  return rawMsg;
+}
 
 var errorHandler={
   retryCounts:{},
@@ -16445,9 +16484,14 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
     }else{
       processingError=error;
       debugLogger.error('对话处理错误: '+error.message);
+      var _friendlyMsg = friendlyAPIErrorMsg(error.message);
+      var _isBalance = _friendlyMsg.indexOf('余额不足') >= 0;
+      var _errHtml = _isBalance
+        ? '<div style="color:#b91c1c;padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:14px">'+escapeHtml(_friendlyMsg)+'<br><small><a href="https://platform.deepseek.com/top_up" target="_blank" rel="noopener" style="color:#2563eb">点击前往充值页面</a></small></div>'
+        : '<p style="color:var(--color-danger);padding:8px">'+escapeHtml(_friendlyMsg)+'</p>';
       var body4=contentDiv.querySelector('.msg-body');
-      if(body4)body4.innerHTML='<p style="color:var(--color-danger)"> 处理消息时出错: '+escapeHtml(error.message)+'</p>';
-      else contentDiv.innerHTML='<p style="color:var(--color-danger)"> 处理消息时出错: '+escapeHtml(error.message)+'</p>';
+      if(body4)body4.innerHTML=_errHtml;
+      else contentDiv.innerHTML=_errHtml;
       setStatus('error');
       errorHandler.handle({code:'API_NETWORK',message:error.message},'processUserMessage');
       if(evoWorker&&taskId){
@@ -16974,9 +17018,15 @@ async function callLLMWithToolsLoopStreaming(messages, activeTools, cs, messages
     if(e.message==='用户已中止')throw e;
     debugLogger.error('监工流式异常: '+e.message);
     if(agentMsgDiv){
+      var _friendlyMsg2 = friendlyAPIErrorMsg(e.message);
+      var _isBalance2 = _friendlyMsg2.indexOf('余额不足') >= 0;
       var _errDiv=document.createElement('div');
       _errDiv.style.cssText='color:var(--color-danger);font-size:13px;margin-top:8px;padding:8px;background:#fef2f2;border-radius:6px';
-      _errDiv.textContent='调用失败: '+e.message;
+      if(_isBalance2){
+        _errDiv.innerHTML=escapeHtml(_friendlyMsg2)+'<br><small style="color:#991b1b"><a href="https://platform.deepseek.com/top_up" target="_blank" rel="noopener" style="color:#2563eb">点击充值</a></small>';
+      }else{
+        _errDiv.textContent=_friendlyMsg2;
+      }
       var _cd=agentMsgDiv.querySelector('.message-content');
       if(_cd)_cd.appendChild(_errDiv);
     }
