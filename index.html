@@ -19958,26 +19958,12 @@ async function deleteConversation(convId){
     delete convStates[convId];
     _deleteFlowSession(convId);
     _deleteTodos(convId);
-    // 删除前记下被删对话在排序列表中的位置
-    var _delIdx=-1;
-    if(currentConversationId===convId){
-      var _sortedPre=conversationDB.entries.slice().sort(function(a,b){return b.createdAt-a.createdAt;});
-      for(var _si=0;_si<_sortedPre.length;_si++){if(_sortedPre[_si].id===convId){_delIdx=_si;break;}}
-    }
+    // （已删除：不再需要计算下一个对话索引）
     conversationDB.entries=conversationDB.entries.filter(function(e){return e.id!==convId;});
     if(currentConversationId===convId){
-      if(conversationDB.entries.length>0){
-        var _sortedPost=conversationDB.entries.slice().sort(function(a,b){return b.createdAt-a.createdAt;});
-        var _nextIdx=_delIdx;
-        if(_nextIdx>=_sortedPost.length)_nextIdx=_sortedPost.length-1;
-        if(_nextIdx<0)_nextIdx=0;
-        currentConversationId=_sortedPost[_nextIdx].id;
-        await switchConversation(currentConversationId);
-      }else{
-        currentConversationId=null;
-        var msgList=document.getElementById('messagesList');
-        if(msgList)msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>请开始对话。</p></div>';
-      }
+      currentConversationId=null;
+      var msgList=document.getElementById('messagesList');
+      if(msgList)msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>请开始对话。</p></div>';
     }
     renderConversationList();
     showToast('对话已删除','success');
@@ -19985,6 +19971,7 @@ async function deleteConversation(convId){
 }
 
 // 切换会话（多对话并行：不中断进行中的请求）
+function _restoreFlowBubbles(convId){}
 function _restoreRenderArtifacts(msgList){
   setTimeout(function(){
     // ── chart ──
