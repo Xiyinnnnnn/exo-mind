@@ -18449,11 +18449,16 @@ async function resetSystem(){
     renderEnvVars();
     renderUploadedFilesList();
     updateStorageInfo();
+    // ★ 持久化新对话到 IndexedDB
+    if(conversationDB.entries.length>0){
+      await saveConversationToDB(conversationDB.entries[0]);
+    }
     // 重置UI
     var msgList=document.getElementById('messagesList');
     if(msgList){
       msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>系统已重置，请开始对话。</p></div>';
     }
+    renderConversationList();
     showToast('系统已完全重置 ','success');
   }catch(e){
     showToast('重置失败: '+e.message,'error');
