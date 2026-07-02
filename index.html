@@ -7202,10 +7202,30 @@ function buildTaskWorkerSource(){
   src+='      },\n';
   src+='      console:{log:function(){_stdout.push(Array.prototype.slice.call(arguments).join(" "));}},\n';
   src+='      CONTEXT_FILES:params.context_files||{},\n';
+  src+='      require:function(m){\n';
+  src+='        var _rc=api._requireCache||(api._requireCache={});\n';
+  src+='        if(_rc[m])return _rc[m];\n';
+  src+='        if(m==="fs")return _rc[m]={readFileSync:function(p){if(!_vfs.has(p)||_vfs.get(p)==="__DIR__")throw new Error("文件不存在: "+p);return _vfs.get(p)},writeFileSync:function(p,c){_vfs.set(p,c);return true},appendFileSync:function(p,c){var old=_vfs.has(p)&&_vfs.get(p)!=="__DIR__"?_vfs.get(p):"";_vfs.set(p,old+c);return true},existsSync:function(p){return _vfs.has(p)&&_vfs.get(p)!=="__DIR__"},readdirSync:function(p){var r=[];_vfs.forEach(function(v,k){if(v!=="__DIR__"&&(!p||k.indexOf(p)===0)){var _bn=k;if(p){_bn=k.slice(p.length);if(_bn.charAt(0)==="/")_bn=_bn.slice(1)}r.push(_bn)}});return r},unlinkSync:function(p){if(!_vfs.has(p))throw new Error("文件不存在: "+p);_vfs.delete(p);return true},statSync:function(p){if(!_vfs.has(p))throw new Error("文件不存在: "+p);var _isDir=_vfs.get(p)==="__DIR__";return{size:_isDir?0:_vfs.get(p).length,isFile:function(){return!_isDir},isDirectory:function(){return _isDir}}},mkdirSync:function(p,opts){if(opts&&opts.recursive){var parts=p.split("/").filter(Boolean);var cur="";for(var i=0;i<parts.length;i++){cur+="/"+parts[i];if(!_vfs.has(cur))_vfs.set(cur,"__DIR__")}}else{_vfs.set(p,"__DIR__")}return p}};\n';
+  src+='        if(m==="path")return _rc[m]={join:function(){var a=[];for(var i=0;i<arguments.length;i++){var s=String(arguments[i]);if(s)a.push(s)}return a.join("/").split("\\\\").join("/").replace(/\\/+/g,"/")},basename:function(p){return(p||"").split("/").filter(Boolean).pop()||""},dirname:function(p){var a=(p||"").split("/").filter(Boolean);a.pop();return a.length?a.join("/"):"/"},extname:function(p){var f=(p||"").split("/").filter(Boolean).pop()||"";var i=f.lastIndexOf(".");return i>0?f.slice(i):""},resolve:function(){var a=[];for(var i=0;i<arguments.length;i++){var s=String(arguments[i]);if(s)a.push(s)}return a.join("/").split("\\\\").join("/").replace(/\\/+/g,"/")}};\n';
+  src+='        if(m==="os")return _rc[m]={type:function(){return"Browser"},platform:function(){return"browser"},homedir:function(){return"/home"},hostname:function(){return"localhost"},tmpdir:function(){return"/tmp"},arch:function(){return"wasm32"},cpus:function(){return[{model:"Browser Worker",speed:0,times:{}}]},freemem:function(){return 2*1024*1024*1024},totalmem:function(){return 4*1024*1024*1024},networkInterfaces:function(){return{}},uptime:function(){return 0},EOL:"\\n",constants:{signals:{},errno:{}}};\n';
+  src+='        if(m==="util")return _rc[m]={format:function(){var a=[];for(var i=0;i<arguments.length;i++)a.push(String(arguments[i]));return a.join(" ")},inspect:function(v){return JSON.stringify(v,null,2)}};\n';
+  src+='        if(m==="assert")return _rc[m]={ok:function(v,msg){if(!v)throw new Error(msg||"assertion failed")},equal:function(a,b,msg){if(a!=b)throw new Error(msg||a+"!="+b)},strictEqual:function(a,b,msg){if(a!==b)throw new Error(msg||a+"!=="+b)},deepEqual:function(a,b){var s=JSON.stringify(a)===JSON.stringify(b);if(!s)throw new Error(JSON.stringify(a)+" deepEqual "+JSON.stringify(b))},deepStrictEqual:function(a,b){var s=JSON.stringify(a)===JSON.stringify(b);if(!s)throw new Error(JSON.stringify(a)+" deepStrictEqual "+JSON.stringify(b))}};\n';
+  src+='        if(m==="url")return _rc[m]={parse:function(s,p){try{var u=new URL(s);var o={protocol:u.protocol,slashes:true,auth:null,host:u.host,port:u.port,hostname:u.hostname,hash:u.hash,search:u.search,pathname:u.pathname,path:u.pathname+u.search,href:u.href};if(p){o.query={};u.searchParams.forEach(function(v,k){o.query[k]=v})}return o}catch(e){var i=s.indexOf("://");return{protocol:i>=0?s.slice(0,i+1):"",slashes:i>=0,pathname:s,path:s,href:s}}},format:function(o){var p=o.protocol||"";var h=o.host||(o.hostname||"");if(o.port)h+=":"+o.port;if(h&&p&&!p.endsWith("//"))p+="//";return p+h+(o.pathname||"")+(o.search||"")+(o.hash||"")},resolve:function(f,t){try{return new URL(t,f).href}catch(e){return t}}};\n';
+  src+='        if(m==="querystring")return _rc[m]={parse:function(s,sep,eq,opt){sep=sep||"&";eq=eq||"=";var o={};if(!s)return o;s.split(sep).forEach(function(p){var i=p.indexOf(eq);var k=i>=0?decodeURIComponent(p.slice(0,i)):decodeURIComponent(p);var v=i>=0?decodeURIComponent(p.slice(i+1)):"";if(opt&&opt.decodeURIComponent){k=opt.decodeURIComponent(k);v=opt.decodeURIComponent(v)}o[k]=v});return o},stringify:function(o,sep,eq,opt){sep=sep||"&";eq=eq||"=";var a=[];var enc=opt&&opt.encodeURIComponent?opt.encodeURIComponent:encodeURIComponent;for(var k in o){if(o.hasOwnProperty(k))a.push(enc(k)+eq+enc(String(o[k])))}return a.join(sep)},escape:encodeURIComponent,unescape:decodeURIComponent};\n';
+  src+='        if(m==="crypto")return _rc[m]={randomBytes:function(n){var b=new Uint8Array(n);self.crypto.getRandomValues(b);return b},randomUUID:function(){return self.crypto.randomUUID()},getHashes:function(){return["sha1","sha256","sha384","sha512"]},createHash:function(algo){var _algo=algo==="sha1"?"SHA-1":algo==="sha256"?"SHA-256":algo==="sha384"?"SHA-384":algo==="sha512"?"SHA-512":algo;var _buf=[];var _h={update:function(d){if(typeof d==="string"){_buf.push(d)}else{for(var i=0;i<d.length;i++)_buf.push(String.fromCharCode(d[i]))}return _h},digest:function(fmt){throw new Error("crypto.createHash(\'"+algo+"\').digest()在浏览器沙箱中不支持同步。请使用 crypto.subtle.digest() 或 Python沙箱执行加密操作。")}};return _h},subtle:self.crypto.subtle};\n';
+  src+='        if(m==="http"||m==="https")return _rc[m]={request:function(o,cb){throw new Error("http/https 模块在浏览器沙箱中不可用，请使用 fetch(url, options) 替代")},get:function(u,cb){throw new Error("http.get() 不可用，请使用 fetch() 替代")},METHODS:["GET","POST","PUT","DELETE","PATCH","HEAD"]};\n';
+  src+='        if(m.charAt(0)==="."){var _rp=m;if(_rp.indexOf("./")===0)_rp=_rp.slice(2);else if(_rp.indexOf("../")===0){_rp=_rp.slice(3)}var _candidates=[];_vfs.forEach(function(_v,_k){if(_v!=="__DIR__"&&_k.indexOf(_rp)===_k.length-_rp.length)_candidates.push(_k)});for(var _ci=0;_ci<_candidates.length;_ci++){var _tp=_candidates[_ci];var _msrc=_vfs.get(_tp);var _m={exports:{}};var _mdir="";var _si=_tp.lastIndexOf("/");if(_si>=0)_mdir=_tp.substring(0,_si);var _mf=new Function("module","exports","require","__dirname","__filename","console","api",_msrc);var _mr=function(x){if(x.charAt(0)==="."){if(x.indexOf("./")===0)x=_mdir+"/"+x.slice(2);else if(x.indexOf("../")===0){var _d=_mdir;while(x.indexOf("../")===0){x=x.slice(3);var _li=_d.lastIndexOf("/");_d=_li>=0?_d.substring(0,_li):""}x=_d?(_d+"/"+x):x}}return api.require(x)};_mf(_m,_m.exports,_mr,_mdir,_tp,api.console,api);return _rc[m]=_m.exports}throw new Error("模块未找到: "+m+" (沙箱VFS候选: "+JSON.stringify(_candidates)+")")}\n';
+  src+='        var _map={lodash:{url:"https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js",g:"_"},dayjs:{url:"https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js",g:"dayjs"},marked:{url:"https://cdn.jsdelivr.net/npm/marked/marked.min.js",g:"marked"},qs:{url:"https://cdn.jsdelivr.net/npm/qs/dist/qs.js",g:"Qs"}};\n';
+  src+='        var _e=_map[m];\n';
+  src+='        if(_e){try{importScripts(_e.url);if(self[_e.g])return _rc[m]=self[_e.g]}catch(e){throw new Error("加载 "+m+" CDN失败: "+e.message)}}\n';
+  src+='        var _urls=["https://cdn.jsdelivr.net/npm/"+m+"/dist/umd/index.min.js","https://unpkg.com/"+m+"/dist/umd/index.min.js"];\n';
+  src+='        for(var _i2=0;_i2<_urls.length;_i2++){try{importScripts(_urls[_i2]);if(self[m])return _rc[m]=self[m];var _nl=m.toLowerCase();for(var _k in self){if(_k.toLowerCase()===_nl)return _rc[m]=self[_k]}}catch(e){}}\n';
+  src+='        throw new Error("require(\'"+m+"\') 浏览器沙箱不支持。\\n已内置: fs/path/os/url/querystring/crypto/util/assert\\nhttp/https 请使用 fetch() 替代\\nCDN支持: lodash/dayjs/marked/qs\\n其他npm包请使用Python执行。");\n';
+  src+='      },\n';
   src+='      setTimeout:self.setTimeout\n';
   src+='    };\n';
   src+='    var _result=await Promise.race([\n';
-  src+='      Promise.resolve(new Function("api","return (function(){"+code+"})()")(api)),\n';
+  src+='      Promise.resolve(new Function("api","var require=api.require;var console=api.console;return (function(){"+code+"})()")(api)),\n';
   src+='      new Promise(function(_,reject){setTimeout(function(){reject(new Error("执行超时"))},timeout);})\n';
   src+='    ]);\n';
   src+='    var _fsChanges=[];\n';
@@ -7219,7 +7239,7 @@ function buildTaskWorkerSource(){
   src+='      }\n';
   src+='    }\n';
   src+='    var _out=_stdout.length>0?_stdout.join("\\n")+"\\n":"";\n';
-  src+='    return {result:_out+(_result!==undefined?String(_result):""),fs_changes:_fsChanges};\n';
+  src+='    return {result:_out+(_result!==undefined&&_result!==null?String(_result):""),fs_changes:_fsChanges};\n';
   src+='  }else if(language==="python"){\n';
   src+='    if(!pyodide){\n';
   src+='      try{await loadScript("pyodide",["https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js","https://unpkg.com/pyodide@0.25.0/pyodide.js"],"loadPyodide");pyodide=await loadPyodide({indexURL:"https://cdn.jsdelivr.net/pyodide/v0.25.0/full/"})}catch(e){throw new Error("Python执行需要加载Pyodide，当前环境不支持。请使用JavaScript。")}\n';
@@ -8504,7 +8524,7 @@ function handleTaskWorkerMessage(event){
     pendingWorkerRequests.delete(msg.id);
     if(entry&&entry.resolve){
       if(msg.success){
-        if(msg.fs_changes){
+        if(msg.fs_changes && msg.fs_changes.length > 0){
           entry.resolve({success:true,data:{result:msg.data,fs_changes:msg.fs_changes}});
         }else{
           entry.resolve(msg);
@@ -9146,7 +9166,7 @@ async function toolFilesystem(args){
 
       // ★ 选择性回写：只回写 readwrite 目录的变更
       var output=runResp.data;
-      var fsChanges=(output&&output.fs_changes)?output.fs_changes:[];
+      var fsChanges=runResp.fs_changes||(output&&output.fs_changes)||[];
       var resultText=(output&&output.result!==undefined&&output.result!==null)?output.result:(typeof output==='string'?output:JSON.stringify(output));
       var writeCount=0,skipCount=0;
       for(var ci=0;ci<fsChanges.length;ci++){
