@@ -7309,7 +7309,7 @@ function buildTaskWorkerSource(){
   src+='    return {result:_out+(_result!==undefined&&_result!==null?String(_result):""),fs_changes:_fsChanges};\n';
   src+='  }else if(language==="python"){\n';
   src+='    if(!pyodide){\n';
-  src+='      try{await loadScript("pyodide",["https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js","https://unpkg.com/pyodide@0.25.0/pyodide.js"],"loadPyodide");pyodide=await loadPyodide({indexURL:"https://cdn.jsdelivr.net/pyodide/v0.25.0/full/",lockFileURL:"https://cdn.jsdelivr.net/pyodide/v0.25.0/full/repodata.json"})}catch(e){throw new Error("Python执行需要加载Pyodide，当前环境不支持。请使用JavaScript。")}\n';
+  src+='      try{await loadScript("pyodide",["https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js","https://unpkg.com/pyodide@0.25.0/pyodide.js"],"loadPyodide");pyodide=await loadPyodide({indexURL:"https://cdn.jsdelivr.net/pyodide/v0.25.0/full/"})}catch(e){throw new Error("Python执行需要加载Pyodide，当前环境不支持。请使用JavaScript。")}\n';
   src+='    }\n';
   src+='    for(var _fp2 in fsSnapshot){\n';
   src+='      var _entry=fsSnapshot[_fp2];\n';
