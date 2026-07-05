@@ -20666,6 +20666,7 @@ function newConversation(){
   conversationDB.entries.push(conv);
   saveConversationToDB(conv);
   currentConversationId=id;
+  localStorage.setItem('exo_last_conv',id);
   // ★ 全局变量通过窗口属性代理自动指向新对话的 convStates[id]，无需手动重置
   
   // 新对话：白板技能状态
