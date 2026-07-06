@@ -18478,9 +18478,22 @@ async function resetSystem(){
     if(healthCheckIntervalId){clearInterval(healthCheckIntervalId);}
     // ★ 清除 CDN 库缓存（Cache API: libs）
     try{
-      await caches.delete(CACHE_NAME);
+      // ★ 必须先释放主线程对 Cache 的引用，否则 caches.delete() 会因活跃引用静默失败
       _cacheStorage=null;_cacheReady=null;
-      debugLogger.info(' CDN库缓存已清除');
+      _pdfWorkerBlobUrl=null;_tesseractWorkerBlobUrl=null;
+      var deleted=await caches.delete(CACHE_NAME);
+      if(deleted){
+        debugLogger.info(' CDN库缓存已清除');
+      }else{
+        // ★ 降级：整体删除失败时（已终止Worker的引用可能还没被GC），逐条清空
+        debugLogger.warn(' CDN库整体删除失败，尝试逐条清除...');
+        try{
+          var _tmpCache=await caches.open(CACHE_NAME);
+          var _keys=await _tmpCache.keys();
+          for(var _ki=0;_ki<_keys.length;_ki++){await _tmpCache.delete(_keys[_ki]);}
+          debugLogger.info(' CDN库缓存已逐条清除 ('+_keys.length+' 条)');
+        }catch(_e2){debugLogger.warn(' 逐条清除也失败: '+_e2.message);}
+      }
     }catch(e){debugLogger.warn(' 清除缓存失败: '+e.message);}
     var d=await getDB();
     var storeNames=Array.from(d.objectStoreNames);
@@ -18583,27 +18596,10 @@ async function resetSystem(){
       pipeline_token_budget:111000000
     };
     await createFile('/config/settings.json',JSON.stringify(settings,null,2));
-    startWorkers();
-    startHeartbeat();
-    startHealthCheck();
-    await refreshSkillCache();
-    await loadDailyUsage();
-    updateBudgetDisplay();
-    updateTokenDisplay();
-    renderEnvVars();
-    renderUploadedFilesList();
-    updateStorageInfo();
-    // ★ 持久化新对话到 IndexedDB
-    if(conversationDB.entries.length>0){
-      await saveConversationToDB(conversationDB.entries[0]);
-    }
-    // 重置UI
-    var msgList=document.getElementById('messagesList');
-    if(msgList){
-      msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>系统已重置，请开始对话。</p></div>';
-    }
-    renderConversationList();
-    showToast('系统已完全重置 ','success');
+    showToast('系统已完全重置，即将重新加载...','success');
+    // ★ 直接 reload 页面，避免 TaskWorker 在 reset 后立即重新缓存其库文件
+    // 让 initApp() 统一初始化，所有库（主线程+Worker）都从干净缓存状态启动
+    setTimeout(function(){location.reload();},800);
   }catch(e){
     showToast('重置失败: '+e.message,'error');
     debugLogger.error('系统重置失败: '+e.message);
