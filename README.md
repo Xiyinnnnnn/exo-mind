@@ -336,12 +336,6 @@ stateDiagram-v2
         low --> full : fill
     }
     
-    note right of machine
-        嵌套子状态: brewing
-        深历史恢复: history_type="deep"
-        守卫条件: [water>0]
-        跨实体事件: water_tank.drain → machine.water_alert
-    endnote
 ```
 
 **15个action:**
