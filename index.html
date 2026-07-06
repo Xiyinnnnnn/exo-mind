@@ -9059,13 +9059,6 @@ async function toolFilesystem(args){
     case 'create':
       var existed=await readFile(path);
       await createFile(path,content||'');
-	// ★ 如果写入 /downloads/ 目录，同步更新产物注册表，防止下载链接过期
-	if(path.indexOf('/downloads/')===0){
-	  var _dfn=path.split('/').pop();
-	  var _dblob=new Blob([content||''],{type:'application/octet-stream'});
-	  _artifactRegistry[_dfn]={blob:_dblob,filename:_dfn,mimeType:'application/octet-stream',size:_dblob.size,time:Date.now()};
-	  if(_recentFileBlobs)_recentFileBlobs[_dfn]=_dblob;
-	}
 	var totalLen=(content||'').length;
 	var preview=totalLen>5000?(content||'').substring(0,5000)+'\n...(以上为前5000字摘要，文件共'+totalLen+'字符。使用 filesystem read '+path+' 读取完整内容)':(content||'');
 	var prefix=existed!==null?' 文件已覆盖: ':' 文件已创建: ';
@@ -9152,6 +9145,7 @@ async function toolFilesystem(args){
       if(oldContent===null) return ' 源文件不存在: '+path;
       await createFile(newPath,oldContent);
       await deleteFile(path);
+      if(newPath.indexOf('/downloads/')===0){recentDownloads.push({filename:newPath.split('/').pop(),size:new Blob([oldContent||'']).size,type:'application/octet-stream',blob:new Blob([oldContent||''],{type:'application/octet-stream'}),time:Date.now()});}
       return ' 已重命名: '+path+' → '+newPath;
     case 'move':
       if(!args.new_path) throw new Error('move 需要 new_path 参数');
@@ -9163,6 +9157,7 @@ async function toolFilesystem(args){
       await createFile(moveDest,moveContent);
       await deleteFile(path);
       if(path.indexOf('/uploads/')===0){uploadedFiles=uploadedFiles.filter(function(f){return f.path!==path;});}
+      if(moveDest.indexOf('/downloads/')===0){recentDownloads.push({filename:moveDest.split('/').pop(),size:new Blob([moveContent||'']).size,type:'application/octet-stream',blob:new Blob([moveContent||''],{type:'application/octet-stream'}),time:Date.now()});}
       return ' 已移动: '+path+' → '+moveDest;
     case 'copy':
       if(!args.new_path) throw new Error('copy 需要 new_path 参数');
@@ -9172,6 +9167,7 @@ async function toolFilesystem(args){
       var copyContent=await readFile(path);
       if(copyContent===null) return ' 源文件不存在: '+path;
       await createFile(copyDest,copyContent);
+      if(copyDest.indexOf('/downloads/')===0){recentDownloads.push({filename:copyDest.split('/').pop(),size:new Blob([copyContent||'']).size,type:'application/octet-stream',blob:new Blob([copyContent||''],{type:'application/octet-stream'}),time:Date.now()});}
       return ' 已复制: '+path+' → '+copyDest;
     case 'append':
       if(!content)throw new Error('append 需要 content 参数');
@@ -16607,28 +16603,63 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
       }
     },500);
 
-    // === 文件卡片：显示本次生成的所有文件 ===
-    if(recentDownloads.length>0){
+    // === 文件卡片：扫描 /downloads/ 目录（直接读 IndexedDB，不受事务时序影响） ===
+    var _dlFiles=[];
+    try{
+      var _dlDB=await getDB();
+      await new Promise(function(_dlOk,_dlErr){
+        var _dlTx=_dlDB.transaction('files','readonly');
+        var _dlSt=_dlTx.objectStore('files');
+        var _dlRng=IDBKeyRange.bound('/downloads/','/downloads/\uffff',false,true);
+        var _dlCr=_dlSt.openCursor(_dlRng);
+        _dlCr.onsuccess=function(_dlEv){
+          var _dlC=_dlEv.target.result;
+          if(_dlC){_dlFiles.push(_dlC.value);_dlC.continue();}
+          else{_dlOk();}
+        };
+        _dlCr.onerror=function(){_dlErr(_dlCr.error);};
+      });
+    }catch(_dlE){debugLogger.warn('扫描下载目录失败: '+_dlE.message);}
+    // ★ 仅显示本轮次 touched 的文件（recentDownloads 在 registerGeneratedFile / filesystem 操作中已入队）
+    var _touchedSet={};
+    for(var _ti=0;_ti<recentDownloads.length;_ti++){_touchedSet[recentDownloads[_ti].filename]=true;}
+    if(_dlFiles.length>0||recentDownloads.length>0){
       var fileCard=document.createElement('div');
       fileCard.className='message-files-card';
-      var uniq={};
-      for(var rdi=recentDownloads.length-1;rdi>=0;rdi--){
-        var rd=recentDownloads[rdi];
-        if(uniq[rd.filename])continue;uniq[rd.filename]=true;
+      if(!window._recentFileBlobs)window._recentFileBlobs={};
+      if(!window._artifactRegistry)window._artifactRegistry={};
+      var _rendered={};
+      // 从 IndexedDB 扫描结果中取，会用最新内容
+      for(var _fi=0;_fi<_dlFiles.length;_fi++){
+        var _df=_dlFiles[_fi];
+        if(!_df.content)continue;
+        var _fn=_df.path.split('/').pop();
+        if(!_touchedSet[_fn])continue;
+        _rendered[_fn]=true;
+        var _blob=_df.content instanceof Blob?_df.content:new Blob([_df.content],{type:'application/octet-stream'});
+        var _sz=_df.size||_blob.size;
+        window._recentFileBlobs[_fn]=_blob;
+        window._artifactRegistry[_fn]={blob:_blob,filename:_fn,mimeType:_blob.type,size:_sz,time:Date.now()};
         var row=document.createElement('div');
         row.className='file-card-item';
-        var escapedFn=escapeHtml(rd.filename).replace(/'/g,"\\'");
-        row.innerHTML='<span class="file-card-icon"></span><span class="file-card-name">'+escapeHtml(rd.filename)+'</span><span class="file-card-size">'+formatSize(rd.size)+'</span><button class="file-card-dl-btn" title="下载" data-filename="'+escapedFn+'" onclick="_downloadRecentFile(this)">⬇</button>';
-        // 存储引用到全局映射以便恢复时查找
-        if(!window._recentFileBlobs)window._recentFileBlobs={};
-        window._recentFileBlobs[rd.filename]=rd.blob;
-        // ★ 产物注册表：保证与 recentFileBlobs 同步
-        if(!window._artifactRegistry)window._artifactRegistry={};
-        window._artifactRegistry[rd.filename]={blob:rd.blob,filename:rd.filename,mimeType:rd.type,size:rd.size,time:rd.time||Date.now()};
-
+        var _escFn=escapeHtml(_fn).replace(/'/g,"\\\\'");
+        row.innerHTML='<span class="file-card-icon"></span><span class="file-card-name">'+escapeHtml(_fn)+'</span><span class="file-card-size">'+formatSize(_sz)+'</span><button class="file-card-dl-btn" title="下载" data-filename="'+_escFn+'" onclick="_downloadRecentFile(this)">⬇</button>';
         fileCard.appendChild(row);
       }
-      contentDiv.appendChild(fileCard);
+      // 兜底：recentDownloads 中已记录但 IndexedDB 还未提交的（registerGeneratedFile fire-and-forget 场景）
+      for(var _ri=0;_ri<recentDownloads.length;_ri++){
+        var _rd=recentDownloads[_ri];
+        if(_rendered[_rd.filename])continue;
+        _rendered[_rd.filename]=true;
+        window._recentFileBlobs[_rd.filename]=_rd.blob;
+        window._artifactRegistry[_rd.filename]={blob:_rd.blob,filename:_rd.filename,mimeType:_rd.type,size:_rd.size,time:_rd.time||Date.now()};
+        var row2=document.createElement('div');
+        row2.className='file-card-item';
+        var _escFn2=escapeHtml(_rd.filename).replace(/'/g,"\\\\'");
+        row2.innerHTML='<span class="file-card-icon"></span><span class="file-card-name">'+escapeHtml(_rd.filename)+'</span><span class="file-card-size">'+formatSize(_rd.size)+'</span><button class="file-card-dl-btn" title="下载" data-filename="'+_escFn2+'" onclick="_downloadRecentFile(this)">⬇</button>';
+        fileCard.appendChild(row2);
+      }
+      if(fileCard.children.length>0){contentDiv.appendChild(fileCard);}
       recentDownloads=[];
     }
 
