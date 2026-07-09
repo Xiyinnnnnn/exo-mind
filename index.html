@@ -20240,7 +20240,7 @@ async function loadConversationsFromDB(){
       conversationDB.entries=all;
       var _lastId=localStorage.getItem('exo_last_conv');
       var _found=_lastId&&all.find(function(e){return e.id===_lastId;});
-      currentConversationId=_found?_found.id:(_lastId||all[0].id);
+      currentConversationId=_found?_found.id:(all.length>0?all[0].id:null);
     }else{
       // 无历史对话，保持欢迎界面，不创建对话
       conversationDB.entries=[];
@@ -20285,6 +20285,12 @@ async function deleteConversation(convId){
     conversationDB.entries=conversationDB.entries.filter(function(e){return e.id!==convId;});
     if(currentConversationId===convId){
       currentConversationId=null;
+      localStorage.removeItem('exo_last_conv');
+      // 若还有其他对话，自动切换到第一个可用对话
+      if(conversationDB.entries.length>0){
+        currentConversationId=conversationDB.entries[0].id;
+        localStorage.setItem('exo_last_conv',currentConversationId);
+      }
       var msgList=document.getElementById('messagesList');
       if(msgList)msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>请开始对话。</p></div>';
     }
@@ -20831,6 +20837,7 @@ async function deleteAllConversations(){
     }
     conversationDB.entries=[];
     currentConversationId=null;
+    localStorage.removeItem('exo_last_conv');
     var msgList=document.getElementById('messagesList');
     if(msgList)msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>所有对话已清空。</p></div>';
     renderConversationList();
