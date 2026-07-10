@@ -16791,8 +16791,24 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
     // ★ cs.isProcessing 已在心流触发块中管理，此处不再重复置 false
     if(!(flowSession()&&flowSession().active))isProcessing=false;
     cs.stopRequested=false;
-    cs.llmController=null;
-    cs.streamReader=null;
+    // ★★★【BUGFIX】finally 块中安全清理，防止死引用导致暂停按钮失效
+    if(cs.llmController){
+      try{cs.llmController.abort();}catch(e){}
+      cs.llmController=null;
+    }
+    if(cs.streamReader){
+      try{cs.streamReader.cancel();}catch(e){}
+      cs.streamReader=null;
+    }
+    // ★ 全局引用同步清理
+    if(typeof activeLLMController !== 'undefined' && activeLLMController){
+      try{activeLLMController.abort();}catch(e){}
+      activeLLMController=null;
+    }
+    if(typeof activeStreamReader !== 'undefined' && activeStreamReader){
+      try{activeStreamReader.cancel();}catch(e){}
+      activeStreamReader=null;
+    }
     cs.currentTaskId=null;
     currentTaskId=null;
     taskStartTime=null;
@@ -18905,10 +18921,26 @@ document.addEventListener('visibilitychange',function(){
       var _cs2=_ensureConvState(currentConversationId);
       if(_cs2&&_cs2.isProcessing){
         debugLogger.warn('后台超2分钟，强制重置processing');
+        // ★★★【BUGFIX】先中止正在进行的请求，再释放引用，防止请求仍在后台运行导致暂停按钮失效
+        if(_cs2.llmController){
+          try{_cs2.llmController.abort();}catch(e){}
+          _cs2.llmController=null;
+        }
+        // ★ 全局引用同步清理（确保与对话状态一致）
+        if(typeof activeLLMController !== 'undefined' && activeLLMController){
+          try{activeLLMController.abort();}catch(e){}
+          activeLLMController=null;
+        }
+        if(_cs2.streamReader){
+          try{_cs2.streamReader.cancel();}catch(e){}
+          _cs2.streamReader=null;
+        }
+        if(typeof activeStreamReader !== 'undefined' && activeStreamReader){
+          try{activeStreamReader.cancel();}catch(e){}
+          activeStreamReader=null;
+        }
         _cs2.isProcessing=false;
         _cs2.stopRequested=false;
-        _cs2.llmController=null;
-        _cs2.streamReader=null;
         updateSendButton();
         setStatus('idle');
       }
@@ -19006,9 +19038,17 @@ function initEventBindings(){
   function _stopGeneration(){
     var cs=_ensureConvState(currentConversationId);
     if(cs){cs.stopRequested=true;isProcessing=false;}
+    // ★★★【BUGFIX】先 abort/cancel 再释放引用，与 visibilitychange/processUserMessage finally 保持一致
     if(cs&&cs.llmController){try{cs.llmController.abort();}catch(e){}cs.llmController=null;}
+    if(typeof activeLLMController !== 'undefined' && activeLLMController){
+      try{activeLLMController.abort();}catch(e){}
+      activeLLMController=null;
+    }
     if(cs&&cs.streamReader){try{cs.streamReader.cancel();}catch(e){}cs.streamReader=null;}
-    // ★ 全局变量代理自动写入 cs，无需单独赋值
+    if(typeof activeStreamReader !== 'undefined' && activeStreamReader){
+      try{activeStreamReader.cancel();}catch(e){}
+      activeStreamReader=null;
+    }
     setStatus('idle');
     updateSendButton();
     debugLogger.info('用户中断了处理链路');
@@ -19018,7 +19058,15 @@ function initEventBindings(){
     var cs=_ensureConvState(currentConversationId);
     if(cs){cs.stopRequested=true;isProcessing=false;}
     if(cs&&cs.llmController){try{cs.llmController.abort();}catch(e){}cs.llmController=null;}
+    if(typeof activeLLMController !== 'undefined' && activeLLMController){
+      try{activeLLMController.abort();}catch(e){}
+      activeLLMController=null;
+    }
     if(cs&&cs.streamReader){try{cs.streamReader.cancel();}catch(e){}cs.streamReader=null;}
+    if(typeof activeStreamReader !== 'undefined' && activeStreamReader){
+      try{activeStreamReader.cancel();}catch(e){}
+      activeStreamReader=null;
+    }
   }
   if(btnSend&&userInput){
     btnSend.addEventListener('click',function(){
