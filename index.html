@@ -15070,7 +15070,7 @@ function _buildFullSystemPrompt(userText){
     sp += '\\n\\n' + triggered.join('\\n');
     debugLogger.info('技能推荐: '+triggered.length+'个未激活技能触发词匹配');
   }
-  sp += '\n<TIME>'+new Date().toISOString()+'</TIME>';
+  sp += '\n<TIME>'+new Date().toDateString()+'</TIME>';
   return sp;
 }
 
