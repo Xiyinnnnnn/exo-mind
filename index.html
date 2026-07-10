@@ -18886,68 +18886,16 @@ storageInfoIntervalId=setInterval(function(){updateStorageInfo();},60000);
 // 第38部分：页面卸载清理
 // ================================================================
 
-window.addEventListener('beforeunload',function(){
-  if(evoWorkerManager){try{evoWorkerManager.terminate();}catch(e){}}
-  if(taskWorkerManager){try{taskWorkerManager.terminate();}catch(e){}}
-  if(heartbeatIntervalId)clearInterval(heartbeatIntervalId);
-  if(healthCheckIntervalId)clearInterval(healthCheckIntervalId);
-  if(storageInfoIntervalId)clearInterval(storageInfoIntervalId);
-  if(_calendarWakeTimer){clearInterval(_calendarWakeTimer);_calendarWakeTimer=null;}
-  // 释放文件锁
-  if(fileLock.owner==='main_thread'){releaseFileLock('main_thread');}
-  isProcessing=false;
-});
-
-// ================================================================
-// 第39部分：窗口可见性处理
-// ================================================================
-
 var _bgTimestamp=0;
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){
     _bgTimestamp=Date.now();
-    if(evoWorker){try{evoWorker.postMessage({type:'pause_evo',payload:{}});}catch(e){}}
-    debugLogger.debug('页面隐藏，进化已暂停');
   }else{
-    var bgDuration=Date.now()-_bgTimestamp;
-    if(evoWorker){try{evoWorker.postMessage({type:'resume_evo',payload:{}});}catch(e){}}
     updateBudgetDisplay();
     updateTokenDisplay();
     updateStorageInfo();
-    debugLogger.debug('页面可见，后台时长: '+(bgDuration/1000).toFixed(1)+'s');
-
-    // 后台超2分钟，强制释放processing防止卡死
-    if(bgDuration>120000){
-      var _cs2=_ensureConvState(currentConversationId);
-      if(_cs2&&_cs2.isProcessing){
-        debugLogger.warn('后台超2分钟，强制重置processing');
-        // ★★★【BUGFIX】先中止正在进行的请求，再释放引用，防止请求仍在后台运行导致暂停按钮失效
-        if(_cs2.llmController){
-          try{_cs2.llmController.abort();}catch(e){}
-          _cs2.llmController=null;
-        }
-        // ★ 全局引用同步清理（确保与对话状态一致）
-        if(typeof activeLLMController !== 'undefined' && activeLLMController){
-          try{activeLLMController.abort();}catch(e){}
-          activeLLMController=null;
-        }
-        if(_cs2.streamReader){
-          try{_cs2.streamReader.cancel();}catch(e){}
-          _cs2.streamReader=null;
-        }
-        if(typeof activeStreamReader !== 'undefined' && activeStreamReader){
-          try{activeStreamReader.cancel();}catch(e){}
-          activeStreamReader=null;
-        }
-        _cs2.isProcessing=false;
-        _cs2.stopRequested=false;
-        updateSendButton();
-        setStatus('idle');
-      }
-    }
   }
 });
-
 // ================================================================
 // 第40部分：移动端键盘适配
 // ================================================================
