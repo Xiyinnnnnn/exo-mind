@@ -15062,14 +15062,10 @@ function buildSystemPromptWithSkills(role){
   return parts.join('\n');
 }
 
-// ===== 辅助：构建完整系统提示（含激活技能 + 未激活推荐） =====
+// ===== 辅助：构建完整系统提示（不再含未激活推荐，推荐已改为 _injected user 消息注入） =====
 function _buildFullSystemPrompt(userText){
   var sp = buildSystemPromptWithSkills();
-  var triggered = getTriggeredSkillFragments(userText||'');
-  if(triggered.length > 0){
-    sp += '\\n\\n' + triggered.join('\\n');
-    debugLogger.info('技能推荐: '+triggered.length+'个未激活技能触发词匹配');
-  }
+  // ★ 技能/工具推荐已移出 system prompt，改为 _injected user 消息注入（见 processUserMessage）
   sp += '\n<TIME>'+new Date().toDateString()+'</TIME>';
   return sp;
 }
@@ -15708,6 +15704,16 @@ async function processUserMessage(userText,taskId){
     messages.push(_summaryEntry);
   }
   var _preUserMessages = messages.slice();
+  // ★ 技能/工具推荐以 _injected user 消息注入到真正用户消息的上方（尾部效应）
+  var triggered = getTriggeredSkillFragments(userText||'');
+  if(triggered.length > 0){
+    messages.push({
+      role: 'user',
+      content: '【技能推荐】' + triggered.join(' ') + '\\n（以上推荐仅供参考，非必选）',
+      _injected: true
+    });
+    debugLogger.info('技能推荐: '+triggered.length+'个未激活技能触发词匹配（已注入上下文中）');
+  }
   messages.push({role:'user',content:userText});
 
   // 搜索类似经验
@@ -15980,7 +15986,7 @@ async function processUserMessage(userText,taskId){
         }
       }
 
-      // ★ TODO 注入 — 累计token消耗>100000或dirty标记时注入当前进度
+      // ★ TODO 注入 — 累计token消耗>50K或dirty标记时注入当前进度
       _updateTokenAccumulator(currentConversationId,_estimateTokens(JSON.stringify(messages)));
       var _todoCard=_buildTodoUserInjection(currentConversationId,'main');
       if(_todoCard){
@@ -17732,16 +17738,15 @@ function _buildTodoUserInjection(convId, role){
   var cumulative=_getCumulativeTokens(convId);
 
   if(!todos._dirty){
-    var nextAt=todos._nextInjectAt||100000;
+    var nextAt=todos._nextInjectAt||50000;
     if(cumulative<nextAt)return null;
   }
 
   var card=_renderTodoCard(todos,role);
   if(!card)return null;
   if(card===todos._lastCard&&!todos._dirty)return null;
-
   todos._lastCard=card;
-  todos._nextInjectAt=cumulative+100000;
+  todos._nextInjectAt=cumulative+50000;
   todos._dirty=false;
   _setTodos(convId,todos);
 
