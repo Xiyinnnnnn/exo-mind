@@ -5086,7 +5086,6 @@ async function saveSettings(){
   if(newSettings.mcts_fast_token_budget===5000000||newSettings.mcts_fast_token_budget===_oldFastProp)
     newSettings.mcts_fast_token_budget=Math.round(newSettings.daily_token_limit/10);
   if(newSettings.mcts_standard_token_budget===10000000||newSettings.mcts_standard_token_budget===_oldStdProp)
-  if(newSettings.mcts_standard_token_budget===10000000||newSettings.mcts_standard_token_budget===_oldStdProp)
     newSettings.mcts_standard_token_budget=Math.round(newSettings.daily_token_limit/5);
   // ★ 保留缓存的模型列表（由获取模型按钮填充，无对应 DOM 元素）
   newSettings.cached_models = settings.cached_models || null;
@@ -5329,6 +5328,29 @@ function applySettingsToUI(){
         _sel.appendChild(_o);
       }
       _parent.replaceChild(_sel, _modelInput);
+    }
+  }
+  // ★ 开关自动保存：为所有 toggle-switch 绑定 change 事件（带防抖）
+  var _toggleKeys = {};
+  for(var _bi = 0; _bi < BINDINGS.length; _bi++) {
+    if(BINDINGS[_bi].type === 'checked') {
+      _toggleKeys[BINDINGS[_bi].el] = BINDINGS[_bi].key;
+    }
+  }
+  var _toggles = document.querySelectorAll('.toggle-switch input[type="checkbox"][id]');
+  for(var _ti = 0; _ti < _toggles.length; _ti++) {
+    var _cb = _toggles[_ti];
+    if(_cb.hasAttribute('data-auto-save-bound')) continue;
+    _cb.setAttribute('data-auto-save-bound', '1');
+    var _key = _toggleKeys[_cb.id];
+    if(_key !== undefined) {
+      _cb.addEventListener('change', function() {
+        settings[this.getAttribute('data-sk')] = this.checked;
+        clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(function(){ saveSettings(); }, 300);
+      });
+      // 用 data-sk 存档 key，避免闭包引用问题
+      _cb.setAttribute('data-sk', _key);
     }
   }
 }
@@ -18962,6 +18984,15 @@ function initEventBindings(){
       settingsDrawer.setAttribute('aria-hidden','false');settingsDrawer.removeAttribute('inert');
       renderKBList();
       renderMemList();
+      // ★ 文件管理面板已展开则自动刷新（覆盖关闭面板→对话→再打开面板的场景）
+      var _filesSection = document.querySelector('.section-header[data-section="files"]');
+      if(_filesSection) {
+        var _filesBody = _filesSection.nextElementSibling;
+        if(_filesBody && !_filesBody.classList.contains('collapsed')) {
+          renderFileManager(_activeFileCat, (document.getElementById('filePolicySearch')||{}).value||''); 
+          updateStorageInfo();
+        }
+      }
     });
     btnCloseSettings.addEventListener('click',closeSettings);
     overlay.addEventListener('click',closeSettings);
@@ -18996,6 +19027,13 @@ function initEventBindings(){
       body.classList.remove('collapsed');
       if(arrow)arrow.classList.remove('collapsed');
       if(arrow)arrow.textContent='▼';
+      // ★ 展开文件管理面板时自动刷新文件列表（保留当前搜索关键词）
+      if(headerEl.getAttribute('data-section')==='files'){
+        setTimeout(function(){ 
+          renderFileManager(_activeFileCat, (document.getElementById('filePolicySearch')||{}).value||''); 
+          updateStorageInfo(); 
+        }, 100);
+      }
     }else{
       body.classList.add('collapsed');
       if(arrow)arrow.classList.add('collapsed');
@@ -19201,7 +19239,7 @@ function initEventBindings(){
       parent.replaceChild(sel,modelEl);
       // ★ 将模型列表持久化缓存到 settings 中，下次直接复用无需 API 请求
       settings.cached_models = models.map(function(m){ return m.id; });
-      saveSettings();
+      saveSettings().catch(function(err){ debugLogger.warn('模型缓存持久化失败: '+err.message); });
       showToast('已获取 '+models.length+' 个模型并缓存','success');
     }catch(e){showToast('网络错误: '+e.message,'error');}
     btnFetchModels.disabled=false;btnFetchModels.textContent='获取模型';
@@ -19716,8 +19754,6 @@ function initEventBindings(){
       renderFileManager(_activeFileCat,'');
     });
   }
-
-  // 分类标签
   var filePolicyTags=document.getElementById('filePolicyTags');
   if(filePolicyTags){
     filePolicyTags.addEventListener('click',function(e){
@@ -19727,6 +19763,7 @@ function initEventBindings(){
       for(var ti=0;ti<allTags.length;ti++)allTags[ti].classList.remove('active');
       tag.classList.add('active');
       _activeFileCat=tag.getAttribute('data-cat')||'all';
+      renderFileManager(_activeFileCat, (document.getElementById('filePolicySearch')||{}).value||'');
     });
   }
 
