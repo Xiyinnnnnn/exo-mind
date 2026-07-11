@@ -1202,7 +1202,7 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'[MUST] 思考后→工具调用。不准只思考不行动。\n'
 +'[MUST] 代码/数据/报告 → 写文件。简单问答 → 直接交付。\n'
 +'[MUST] 查优于猜：记忆→知识库→网络→才推理。不跳。\n'
-+'[MUST] 行操作→从下到上，改完复读。\n'
++'[MUST] 行操作→从下到上，改完复查。\n'
 +'[BOOT] 首条消息逐轮执行，不跳过：\n'
 +'  ① skill_manager query 意图    ▸ 匹配技能→set激活\n'
 +'  ② help query 需求             ▸ 匹配工具→set载入\n'
@@ -15850,20 +15850,20 @@ async function processUserMessage(userText,taskId){
   if(compressed){
     _autoToast.className='toast success';
     _autoToast.textContent='已自动压缩 → '+compressed.length+' 条消息';
+    setTimeout(function(){
+      _autoToast.style.opacity='0';
+      _autoToast.style.transition='opacity 0.3s ease';
+      setTimeout(function(){if(_autoToast.parentNode)_autoToast.remove();},300);
+    },3000);
     var _summaryEntry = compressed[0];
     var _historyEntries = compressed.slice(1);
     for(var _ci=0;_ci<_historyEntries.length;_ci++)_historyEntries[_ci]._compressed=true;
     messages = _historyEntries;
     messages.push(_summaryEntry);
   }else{
-    _autoToast.className='toast info';
-    _autoToast.textContent='当前上下文无需压缩';
+    // 无需压缩 → 静默移除 toast（上下文检查阶段用户无感，不显示"无需压缩"提示）
+    if(_autoToast.parentNode)_autoToast.remove();
   }
-  setTimeout(function(){
-    _autoToast.style.opacity='0';
-    _autoToast.style.transition='opacity 0.3s ease';
-    setTimeout(function(){if(_autoToast.parentNode)_autoToast.remove();},300);
-  },3000);
   var _preUserMessages = messages.slice();
 
   // ★ 技能/工具推荐以 _injected user 消息注入到真正用户消息的上方（尾部效应）
@@ -20495,6 +20495,7 @@ async function deleteConversation(convId){
       }
       var msgList=document.getElementById('messagesList');
       if(msgList)msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>请开始对话。</p></div>';
+      _updateToolbarTokenDisplay();
     }
     renderConversationList();
     showToast('对话已删除','success');
@@ -20723,6 +20724,7 @@ async function switchConversation(convId,forceSwitch){
     }catch(e){debugLogger.warn('切换会话失败: '+e.message);}
     if(currentConversationId===convId){renderConversationList();updateSendButton();}
   }
+  _updateToolbarTokenDisplay();
   _streamTargetConvId=_savedStreamTarget;
 }
 
@@ -21007,6 +21009,7 @@ function newConversation(){
   if(msgList)msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>请开始对话。</p></div>';
   renderConversationList();
   updateSendButton();
+  _updateToolbarTokenDisplay();
   closeSidebar();
 }
 
