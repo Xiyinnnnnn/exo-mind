@@ -1,4 +1,3 @@
-https://xiyinnnnnn.github.io/exo-mind/index.html
 <!-- language-tabs -->
 
 [ 中文](#chinese) | [ English](#english)
