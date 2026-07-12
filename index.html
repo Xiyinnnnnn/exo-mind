@@ -4085,10 +4085,15 @@ async function _compressOldMessages(messages,modelMaxTokens){
     if(messages.length<=2)return null;
   }
 
-  // ★ 动态保留：从最新往前累加，直到超过 limit*60%，保留≥2条
+  // ★ 动态保留：从最新往前累加，直到超过保留阈值，保留≥2条
+  //   手动强制压缩(modelMaxTokens===0)用积极策略：保留最多 totalEst×50%
+  //   自动压缩用原策略：保留最多 limit×60%
+  var keepTarget = (modelMaxTokens === 0)
+    ? Math.min(totalEst * 0.5, limit * 0.3)
+    : limit * 0.6;
   var keepCount=0,keepSum=0;
   for(var i=messages.length-1;i>=0;i--){
-    if(keepSum+perMsg[i]>limit*0.6&&keepCount>=2)break;
+    if(keepSum+perMsg[i] > keepTarget && keepCount >= 2) break;
     keepSum+=perMsg[i];
     keepCount++;
   }
