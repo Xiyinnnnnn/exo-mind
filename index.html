@@ -1276,26 +1276,24 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'→确认: Open-Meteo免费无key | hourly有precipitation+rain | 雷达用precipitation_probability着色\n'
 +'\n'
 +'▸ P3 构建框架 — L4→触发 todo create+flow_mode start\n'
-+'  链=todo create 拆解→flow_mode start→监工+干活Agent自主迭代:\n'
-+'    todo条目1: Node后端(express+axios缓存)→ /d/weather-server/\n'
-+'    todo条目2: 前端Dashboard(Chart.js多城对比+预警)→ /d/weather-client/\n'
-+'    todo条目3: 集成测试+部署脚本→ /d/weather-deploy/\n'
++'  链=todo create 拆解→flow_mode start→监工+干活Agent自主迭代\n'
 +'  校验: 依赖明确→各条目独立可测\n'
 +'→todo create title="天气Dashboard" items=[{"id":"1","desc":"Node后端+缓存"},{"id":"2","desc":"前端Chart.js Dashboard"},{"id":"3","desc":"集成测试+部署脚本"}]\n'
 +'→flow_mode start task="开发天气Dashboard"\n'
 +'\n'
 +'▸ P4 起草并自检 — 分Agent产出，逐块过□:\n'
-+'  [AgentA] □API异常处理? →补timeout+retry □数据缓存? →存Map TTL=10min\n'
++'  [AgentA] □异常处理+缓存→TTL=10min\n'
 +'  →filesystem create /d/weather-server/index.js\n'
-+'  →code_runner path="/d/weather-server/index.js" → exitCode:0 | 端点200\n'
-+'  [AgentB] □移动端适配? →补responsive □预警阈值可配? →补config.js\n'
++'  [AgentB] □移动端适配+预警阈值→可配置\n'
 +'  →filesystem copy /d/weather-client/index.html /d/weather-client/index.v1.bak\n'
 +'  →filesystem create /d/weather-client/index.html\n'
-+'  →code_runner path="/d/weather-client/index.html" → 渲染正常\n'
-+'（监工接管→逐条验证→干活Agent执行→可选pipeline并行编排独立条目）\n'
-+'→pipeline create dag /d/weather_pipeline.json → pipeline run\n'
-+'→AgentA 通过 AgentB 通过 AgentC 通过 | 集成测试:3/3通过\n'
-+'→filesystem read /d/weather-client/index.html →确认\n'
++'  →filesystem read /d/weather-client/index.html\n'
++'  →filesystem replace_lines line=45 endLine=45 content="responsive"\n'
++'  →filesystem replace_lines line=20 endLine=22 content="预警阈值"\n'
++'  →code_runner path="/d/weather-client/index.html" → exitCode:0\n'
++'  →filesystem read /d/weather-client/index.html →确认\n'
++'（监工逐条验证→干活Agent修复→pipeline编排并行）\n'
++'→pipeline run → 3/3通过\n'
 +'→longterm_memory store "天气Dashboard架构:Open-Meteo+express缓存+Chart.js多城对比" topic=weather-dashboard\n'
 +'\n'
 +'▸ P5 润色 — 通读全链路→修"温度单位"前后不一致(一处F一处C)→统一为C→验递进\n'
@@ -1306,29 +1304,16 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'一句核心: Open-Meteo免费API+Node代理缓存+Chart.js可视化，三城天气对比+降雨雷达+高温预警。\n'
 +'\n'
 +'## 1. 快速启动\n'
-+'- 安装: cd /d/weather-server && npm install express axios\n'
-+'- 启动后端: node index.js (端口3000)\n'
-+'- 前端: 直接打开 /d/weather-client/index.html\n'
++'- 后端: cd /d/weather-server && node index.js\n'
++'- 前端: 打开 /d/weather-client/index.html\n'
 +'\n'
-+'## 2. 架构说明\n'
-+'- 数据源: Open-Meteo (免费，无需API Key)\n'
-+'- 后端: Express代理+10min内存缓存，防API限流\n'
-+'- 前端: Chart.js四面板(温度折线+降雨柱状+湿度热力+预警条)\n'
-+'\n'
-+'## 3. 文件清单\n'
-+'- /d/weather-server/index.js — Express后端+缓存\n'
-+'- /d/weather-client/index.html — 完整Dashboard\n'
-+'- /d/weather-client/index.v1.bak — 修改前版本备份，可回滚\n'
-+'- /d/weather_pipeline.json — Pipeline DAG定义（可选，并行编排时生成）\n'
-+'\n'
-+'## 4. 常见问题\n'
-+'- 跨域报错: 确认后端已启动，前端fetch指向localhost:3000\n'
-+'- 数据不刷新: 缓存TTL=10min，手动重启后端\n'
-+'- 城市无数据: Open-Meteo用经纬度，确认坐标正确\n'
++'## 2. 文件产出\n'
++'- /d/weather-server/index.js — Express后端\n'
++'- /d/weather-client/index.html — 前端Dashboard\n'
++'- /d/weather-client/index.v1.bak — 修改前备份\n'
 +'\n'
 +'</answer>\n'
 +'</EXAMPLE>\n'
-+'\n'
 +'<REMINDER> <think>内部推理→<answer>用户交付。P1-P5绝不出现在<answer>或裸文本中。P4未过不退。\n'
 +'  P2先查记忆/知识库→再search。交付后必 store longterm_memory。每3轮复查[GRADE]。</REMINDER>';
 
@@ -6780,6 +6765,9 @@ var _SAFE_TAGS={div:1,span:1,p:1,br:1,hr:1,h1:1,h2:1,h3:1,h4:1,h5:1,h6:1,
   ul:1,ol:1,li:1,dl:1,dt:1,dd:1,table:1,thead:1,tbody:1,tr:1,th:1,td:1,
   caption:1,colgroup:1,col:1,pre:1,code:1,blockquote:1,em:1,strong:1,
   b:1,i:1,u:1,s:1,del:1,ins:1,sub:1,sup:1,mark:1,small:1,abbr:1,
+  section:1,article:1,header:1,footer:1,nav:1,aside:1,main:1,
+  figure:1,figcaption:1,details:1,summary:1,
+  cite:1,dfn:1,kbd:1,samp:1,var:1,q:1,wbr:1,time:1,bdi:1,bdo:1,address:1,
   a:1,img:1,svg:1,g:1,path:1,circle:1,rect:1,line:1,ellipse:1,
   polygon:1,polyline:1,text:1,tspan:1,defs:1,use:1,title:1,desc:1,
   style:1,foreignObject:1,animate:1,animateTransform:1,animateMotion:1,set:1};
@@ -9474,49 +9462,60 @@ async function toolFilesystem(args){
       await updateFile(path,_apNew);
       _registerDownloadable(path,_apNew);
       return '内容已追加到文件末尾: '+path;
-    case 'insert':
-      if(content==null)throw new Error('insert 需要 content 参数');
-      var line=args.line!=null?args.line:1;
-      var src=await readFile(path)||'';
-      var lines=src.split('\n');
-      if(line<1)line=1;
-      if(line>lines.length+1)line=lines.length+1;
-      lines.splice(line-1,0,...content.split('\n'));
-      var _insNew=lines.join('\n');
-      await updateFile(path,_insNew);
-      _registerDownloadable(path,_insNew);
-      return '已在第 '+line+' 行插入内容: '+path;
-    case 'delete_lines':
-      var dlStart=(args.line!=null?args.line:1)-1;
-      var dlEnd=args.endLine!=null?args.endLine:(args.line!=null?args.line:1);
-      if(dlStart<0)dlStart=0;
-      var src2=await readFile(path)||'';
-      var lines2=src2.split('\n');
-      if(dlStart>=lines2.length)return '行号超出文件范围: '+path;
-      if(dlEnd<=0||dlEnd>lines2.length)dlEnd=lines2.length;
-      var dlDeleteCount=dlEnd-dlStart;
-      if(dlDeleteCount<=0)return '行号参数无效：endLine('+dlEnd+')必须≥line('+(dlStart+1)+')，当前deleteCount='+dlDeleteCount+'，未执行删除。';
-      lines2.splice(dlStart,dlDeleteCount);
-      var _dlNew=lines2.join('\n');
-      await updateFile(path,_dlNew);
-      _registerDownloadable(path,_dlNew);
-      return '已删除第 '+(dlStart+1)+' 到第 '+dlEnd+' 行: '+path;
-    case 'replace_lines':
-      if(!content&&content!=='')throw new Error('replace_lines 需要 content 参数（空字符串=清空指定行）');
-      var rlStart=(args.line!=null?args.line:1)-1;
-      var rlEnd=args.endLine!=null?args.endLine:(args.line!=null?args.line:1);
-      if(rlStart<0)rlStart=0;
-      var src3=await readFile(path)||'';
-      var lines3=src3.split('\n');
-      if(rlStart>=lines3.length)return '行号超出文件范围: '+path;
-      if(rlEnd<=0||rlEnd>lines3.length)rlEnd=lines3.length;
-      var deleteCount=rlEnd-rlStart;
-      if(deleteCount<=0)return '行号参数无效：endLine('+rlEnd+')必须≥line('+(rlStart+1)+')，当前deleteCount='+deleteCount+'。如需单行替换请确保line=endLine。如需删除后插入，可先delete_lines再insert。';
-      lines3.splice(rlStart,deleteCount,...content.split('\n'));
-      var _rlNew=lines3.join('\n');
-      await updateFile(path,_rlNew);
-      _registerDownloadable(path,_rlNew);
-      return '已替换第 '+(rlStart+1)+' 到第 '+rlEnd+' 行: '+path;
+     case 'insert':
+       if(content==null)throw new Error('insert 需要 content 参数');
+       var line=args.line!=null?args.line:1;
+       var src=await readFile(path)||'';
+       var lines=src.split('\n');
+       if(line<1)line=1;
+       if(line>lines.length+1)line=lines.length+1;
+       // ★ 结构化结果反馈：记录插入的新内容
+       var _insContent=content.split('\n');
+       var _insNewPreview=_insContent.length<=5?_insContent.join('\\n'):_insContent.slice(0,3).join('\\n')+'...(共'+_insContent.length+'行)';
+       lines.splice(line-1,0,..._insContent);
+       var _insNew=lines.join('\n');
+       await updateFile(path,_insNew);
+       _registerDownloadable(path,_insNew);
+      return '已在第 '+line+' 行插入内容: '+path+'\n→ '+_insNewPreview;
+     case 'delete_lines':
+       var dlStart=(args.line!=null?args.line:1)-1;
+       var dlEnd=args.endLine!=null?args.endLine:(args.line!=null?args.line:1);
+       if(dlStart<0)dlStart=0;
+       var src2=await readFile(path)||'';
+       var lines2=src2.split('\n');
+       if(dlStart>=lines2.length)return '行号超出文件范围: '+path;
+       if(dlEnd<=0||dlEnd>lines2.length)dlEnd=lines2.length;
+       var dlDeleteCount=dlEnd-dlStart;
+       if(dlDeleteCount<=0)return '行号参数无效：endLine('+dlEnd+')必须≥line('+(dlStart+1)+')，当前deleteCount='+dlDeleteCount+'，未执行删除。';
+       // ★ 结构化结果反馈：记录被删除的原内容
+       var _dlDeletedLines=lines2.slice(dlStart,dlEnd);
+       var _dlDelPreview=_dlDeletedLines.length<=5?_dlDeletedLines.join('\\n'):_dlDeletedLines.slice(0,3).join('\\n')+'...(共'+_dlDeletedLines.length+'行)';
+       lines2.splice(dlStart,dlDeleteCount);
+       var _dlNew=lines2.join('\n');
+       await updateFile(path,_dlNew);
+       _registerDownloadable(path,_dlNew);
+      return '已删除第 '+(dlStart+1)+' 到第 '+dlEnd+' 行: '+path+'\n'+_dlDelPreview+' → (已删除)';
+     case 'replace_lines':
+       if(!content&&content!=='')throw new Error('replace_lines 需要 content 参数（空字符串=清空指定行）');
+       var rlStart=(args.line!=null?args.line:1)-1;
+       var rlEnd=args.endLine!=null?args.endLine:(args.line!=null?args.line:1);
+       if(rlStart<0)rlStart=0;
+       var src3=await readFile(path)||'';
+       var lines3=src3.split('\n');
+       if(rlStart>=lines3.length)return '行号超出文件范围: '+path;
+       if(rlEnd<=0||rlEnd>lines3.length)rlEnd=lines3.length;
+       var deleteCount=rlEnd-rlStart;
+       if(deleteCount<=0)return '行号参数无效：endLine('+rlEnd+')必须≥line('+(rlStart+1)+')，当前deleteCount='+deleteCount+'。如需单行替换请确保line=endLine。如需删除后插入，可先delete_lines再insert。';
+       // ★ 结构化结果反馈：记录原内容→新内容
+       var _rlOldLines=lines3.slice(rlStart,rlEnd);
+       var _rlNewLines=content.split('\n');
+       var _rlOldPreview=_rlOldLines.length<=5?_rlOldLines.join('\\n'):_rlOldLines.slice(0,3).join('\\n')+'...(共'+_rlOldLines.length+'行)';
+       var _rlNewPreview=_rlNewLines.length<=5?_rlNewLines.join('\\n'):_rlNewLines.slice(0,3).join('\\n')+'...(共'+_rlNewLines.length+'行)';
+       lines3.splice(rlStart,deleteCount,..._rlNewLines);
+       var _rlNew=lines3.join('\n');
+       await updateFile(path,_rlNew);
+       _registerDownloadable(path,_rlNew);
+      return '已替换第 '+(rlStart+1)+' 到第 '+rlEnd+' 行: '+path+'\n'+_rlOldPreview+' → '+_rlNewPreview;
     case 'list':
       return await _renderFileTree(path||'/', args.depth||5);
     case 'tree':
@@ -16851,7 +16850,22 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
 
     
     _streamingActive = false;
-    // 最终渲染
+    // ★【BugFix】容错性捕获：检测并清理泄露到正文的工具调用输出
+    if(agentContent&&totalToolCalls>0){
+      var _lc=agentContent.trim();
+      // 泄露特征：纯JSON工具参数 / 工具标记头 / 行号+JSON组合
+      var _isLeak=(
+        /^\{[^}]*"[a-z_]+"[^}]*\}$/.test(_lc) ||
+        /^---tool:/.test(_lc) ||
+        /^\d+:\s*\{/.test(_lc)
+      );
+      if(_isLeak){
+        debugLogger.info(' 检测到工具调用泄露('+totalToolCalls+'call)，已重定向：'+_lc.substring(0,60));
+        agentContent='';
+      }
+    }
+    // 最终渲染（带try-catch容错）
+    try{
     var body3=contentDiv.querySelector('.msg-body');
     // ★ 修复：若正文仅为[GRADE:Lx]标签，回退到思考内容
     if(agentContent.trim()&&/^\[GRADE:L\d\][\s\S]{0,80}$/.test(agentContent.trim())&&typeof streamReasoning!=='undefined'&&streamReasoning.trim()){
@@ -16872,6 +16886,10 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
         if(body3)body3.innerHTML='<em style=\"color:#888\">（无响应内容）</em>';
         else contentDiv.innerHTML='<em style=\"color:#888\">（无响应内容）</em>';
       }
+    }
+    }catch(e){
+      debugLogger.warn('最终渲染异常:'+e.message);
+      try{if(contentDiv)contentDiv.textContent='（内容渲染失败，请重试）';}catch(e2){}
     }
     _injectCodeCopyButtons(contentDiv);
 
