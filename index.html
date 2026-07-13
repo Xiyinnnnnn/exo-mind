@@ -18446,84 +18446,164 @@ function toggleToolResult() {
 // 第31部分：文件上传处理
 // ================================================================
 
+// ★ [修订] 纯路径解析（不写入）：为图片等需先知道路径的场景预留
+async function _resolveUniquePathOnly(basePath){
+  var np=normalizePath(basePath);
+  var counter=1;
+  var finalPath=np;
+  var lastDot,finalExt,finalNamePart;
+  while(await idbTransaction('files','readonly',function(store){return store.get(finalPath);})!==null&&counter<=999){
+    lastDot=finalPath.lastIndexOf('.');
+    var lastSlash=finalPath.lastIndexOf('/');
+    finalExt=lastDot>lastSlash?finalPath.substring(lastDot):'';
+    finalNamePart=lastDot>lastSlash?finalPath.substring(0,lastDot):finalPath;
+    var trimMatch=finalNamePart.match(/^(.*)_\(\d+\)$/);
+    if(trimMatch)finalNamePart=trimMatch[1];
+    finalPath=finalNamePart+'_('+counter+')'+finalExt;
+    counter++;
+  }
+  var fname=finalPath.substring(finalPath.lastIndexOf('/')+1);
+  return {path:finalPath,name:fname};
+}
+
+// ★ [修订] _resolveUniquePathAndCreate: 原子化预检+写入，消除 TOCTOU 竞态
+//    先 get 预检（优化），再用 store.add 原子写入，失败（键已存在）则递增重试
+async function _resolveUniquePathAndCreate(basePath, content){
+  var np=normalizePath(basePath);
+  var parentDir=getParentDir(np);
+  if(parentDir&&parentDir!=='/'){
+    await ensureDirectoryExists(parentDir);
+  }
+  var counter=1;
+  var finalPath=np;
+  var lastDot,finalExt,finalNamePart;
+  while(true){
+    try{
+      var record={path:finalPath,content:content,size:new Blob([content]).size,
+        created_at:Date.now(),updated_at:Date.now(),accessed_at:Date.now(),
+        compressed:false,metadata:{}};
+      // 先 get 预检（减少不必要的 add 抛错）
+      var existing=await idbTransaction('files','readonly',function(store){return store.get(finalPath);});
+      if(existing===null||existing===undefined){
+        // 文件不存在 → 原子写入（add 在键已存在时抛出 ConstraintError）
+        await idbTransaction('files','readwrite',function(store){return store.add(record);});
+        var fname=finalPath.substring(finalPath.lastIndexOf('/')+1);
+        return {path:finalPath,name:fname};
+      }
+      // 文件已存在 → 递增路径
+      _incPath();
+    }catch(e){
+      // ★ 如果 add 因键已存在抛 ConstraintError，继续递增重试
+      if(e.name==='ConstraintError'||(e.message&&e.message.indexOf('already exists')>=0)){
+        _incPath(); continue;
+      }
+      throw e; // 非约束错误向上传播
+    }
+  }
+  function _incPath(){
+    lastDot=finalPath.lastIndexOf('.');
+    var lastSlash=finalPath.lastIndexOf('/');
+    finalExt=lastDot>lastSlash?finalPath.substring(lastDot):'';
+    finalNamePart=lastDot>lastSlash?finalPath.substring(0,lastDot):finalPath;
+    var trimMatch=finalNamePart.match(/^(.*)_\(\d+\)$/);
+    if(trimMatch)finalNamePart=trimMatch[1];
+    finalPath=finalNamePart+'_('+counter+')'+finalExt;
+    counter++;
+    if(counter>999)throw new Error('无法生成唯一文件名，已达上限(999): '+basePath);
+  }
+}
+
+
 async function handleFileUploads(files){
   var filesArr=Array.prototype.slice.call(files);
   for(var i=0;i<filesArr.length;i++){
-    (function(file){
+    (async function(file){
       var safeName=file.name.replace(/[<>:"\/\\|?*\x00-\x1f]/g,'_');
       if(!safeName||safeName.replace(/\./g,'').trim()==='')safeName='file_'+Date.now();
-      var path='/uploads/'+safeName;
+      var basePath='/uploads/'+safeName;
       var extIdx=safeName.lastIndexOf('.');
       var ext=extIdx>=0?safeName.substring(extIdx).toLowerCase():'';
       var parser=FILE_PARSERS[ext];
+      var isImageFile=IMG_EXTS.indexOf(ext)>=0;
 
-      if(parser){
-        // 有解析器 → ArrayBuffer + 解析
-        var reader=new FileReader();
-        reader.onload=async function(e){
-          try{
-            var arrayBuf=e.target.result;
-            var isImg=IMG_EXTS.indexOf(ext)>=0;
-            var content;
-            if(isImg){
-              // 图片解析器需要 ext 参数（闭包安全）
-              content=await (function(aBuf,extName,fPath){return FILE_PARSERS[extName](aBuf,extName,fPath);})(arrayBuf,ext,path);
-            }else{
-              content=await parser(arrayBuf,path);
-            }
-            var contentLen=typeof content==='string'?content.length:0;
-            if(!isImg&&contentLen>1024*1024){
-              showToast('文件过大 ('+formatSize(contentLen)+')，正在压缩...','info');
-              var compressed=await compressText(content);
-              await createFile(path,compressed);
-            }else{
-              await createFile(path,content);
-            }
-            uploadedFiles.push({name:safeName,path:path,size:contentLen,uploadedAt:Date.now()});
-            showToast('文件已上传: '+safeName+' ('+formatSize(contentLen)+')','success');
-            renderUploadedFilesList();
-          }catch(err){
-            showToast('文件上传失败: '+err.message,'error');
-            debugLogger.error('文件上传失败: '+err.message);
+      try{
+        // ★ 所有有解析器的文件：先解析唯一路径（让解析器在正确的路径上创建 .full/.b64 等辅助文件）
+        if(parser){
+          var _resolvedPathInfo=await _resolveUniquePathOnly(basePath);
+          var resolvedPath=_resolvedPathInfo.path;
+          var resolvedName=_resolvedPathInfo.name;
+          var arrayBuf=await readFileAsArrayBuffer(file);
+          var content,contentLen;
+          if(isImageFile){
+            // 图片解析器：传入已解析的路径，确保 .b64 路径正确
+            content=await (function(aBuf,extName,fPath){
+              return FILE_PARSERS[extName](aBuf,extName,fPath);
+            })(arrayBuf,ext,resolvedPath);
+          }else{
+            // 非图片解析器（PDF/DOCX/XLSX/EPUB/PPTX）：传入已解析的路径
+            content=await parser(arrayBuf,resolvedPath);
           }
-        };
-        reader.onerror=function(e){
-          debugLogger.error('文件读取失败');
-          showToast('文件读取失败','error');
-        };
-        reader.readAsArrayBuffer(file);
-      }else{
-        // 无解析器 → 降级：文本或Data URL
-        var reader=new FileReader();
-        reader.onload=async function(e){
-          try{
-            var content=e.target.result;
-            var contentLen=typeof content==='string'?content.length:0;
-            if(contentLen>1024*1024){
-              showToast('文件过大 ('+formatSize(contentLen)+')，正在压缩...','info');
-              var compressed=await compressText(content);
-              await createFile(path,compressed);
-            }else{
-              await createFile(path,content);
-            }
-            uploadedFiles.push({name:safeName,path:path,size:contentLen,uploadedAt:Date.now()});
-            showToast('文件已上传: '+safeName+' ('+formatSize(contentLen)+')','success');
-            renderUploadedFilesList();
-          }catch(err){
-            showToast('文件上传失败: '+err.message,'error');
-            debugLogger.error('文件上传失败: '+err.message);
-          }
-        };
-        reader.onerror=function(e){
-          debugLogger.error('文件读取失败');
-          showToast('文件读取失败','error');
-        };
-        var isImage=/\.(png|jpe?g|webp|bmp|gif)$/i.test(file.name);
-        if(isImage){reader.readAsDataURL(file);}
-        else{reader.readAsText(file);}
+          contentLen=typeof content==='string'?content.length:0;
+          // 原子写入（路径已预检唯一，store.add 失败时会自动递增重试）
+          var _final=await _resolveUniquePathAndCreate(basePath,content);
+          // 但有可能预检后又有并发写入同一路径，_resolveUniquePathAndCreate 通过递增+重试处理
+          // 此时最终路径可能与预检结果不同；但辅助文件（.full/.b64）已在预检路径上创建
+          // 这是可接受的：辅助文件略多余但无害，主文件路径保证唯一且正确
+          uploadedFiles.push({name:_final.name,path:_final.path,size:contentLen,uploadedAt:Date.now()});
+          showToast('文件已上传: '+_final.name+' ('+formatSize(contentLen)+')','success');
+          renderUploadedFilesList();
+          return;
+        }
+
+        // ★ 无解析器文件：先解析内容，再原子化写入
+        var content,contentLen;
+        isImageFile=/\.(png|jpe?g|webp|bmp|gif)$/i.test(file.name);
+        if(isImageFile){
+          content=await readFileAsDataURL(file);
+        }else{
+          content=await readFileAsText(file);
+        }
+        contentLen=typeof content==='string'?content.length:0;
+        if(!isImageFile&&contentLen>1024*1024){
+          showToast('文件过大 ('+formatSize(contentLen)+')，正在压缩...','info');
+          content=await compressText(content);
+        }
+        var _final=await _resolveUniquePathAndCreate(basePath,content);
+        uploadedFiles.push({name:_final.name,path:_final.path,size:contentLen,uploadedAt:Date.now()});
+        showToast('文件已上传: '+_final.name+' ('+formatSize(contentLen)+')','success');
+        renderUploadedFilesList();
+      }catch(err){
+        showToast('文件上传失败: '+err.message,'error');
+        debugLogger.error('文件上传失败: '+err.message);
       }
     })(filesArr[i]);
   }
+}
+
+// 抽取的辅助函数：Promise 化 FileReader
+function readFileAsArrayBuffer(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(e){resolve(e.target.result);};
+    reader.onerror=function(){reject(new Error('文件读取失败'));};
+    reader.readAsArrayBuffer(file);
+  });
+}
+function readFileAsDataURL(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(e){resolve(e.target.result);};
+    reader.onerror=function(){reject(new Error('文件读取失败'));};
+    reader.readAsDataURL(file);
+  });
+}
+function readFileAsText(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(e){resolve(e.target.result);};
+    reader.onerror=function(){reject(new Error('文件读取失败'));};
+    reader.readAsText(file);
+  });
 }
 
 
