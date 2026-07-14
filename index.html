@@ -4166,7 +4166,7 @@ async function _compressOldMessages(messages,modelMaxTokens){
     // ★ 摘要以 user 角色追加到保留消息之后（不产生 system），system 由外部调用方维护
     var _sumText=summary.trim();
     if(_sumText){
-      compressed.push({role:'user',content:'[历史对话摘要] '+_sumText});
+      compressed.push({role:'user',content:'[历史对话摘要] '+_sumText,_injected:true});
     }
 
     // ★ 极端回退：摘要+保留仍超限 → 丢弃最旧消息直到安全
@@ -8952,6 +8952,7 @@ function _buildLLMRequest(messages,tools,stream,source){
         if(m.tool_call_id)cleaned.tool_call_id=m.tool_call_id;
         if(m.name)cleaned.name=m.name;
         if(m.reasoning_content)cleaned.reasoning_content=_safeStr(m.reasoning_content);
+        if(m._sentToApi)cleaned._sentToApi=m._sentToApi;
         return cleaned;
     });
     
@@ -8963,10 +8964,18 @@ function _buildLLMRequest(messages,tools,stream,source){
     for(var _mi=0;_mi<cleanedMessages.length;_mi++){
       _estMsgTotal+=(cleanedMessages[_mi]._tokens||_estimateTokens((cleanedMessages[_mi].content||'')+(cleanedMessages[_mi].reasoning_content||'')));
     }
-    // ★ 强制精炼所有工具结果（>200字符即精炼），不受超限条件限制，持久化提升跨轮 KV-cache 命中
+    // ★ 跨轮精炼：首次发送保留原始内容，已发送过的旧结果降级为引导语句
     for(var _mi2=0;_mi2<cleanedMessages.length;_mi2++){
       var _cl2=(cleanedMessages[_mi2].content||'').length;
       if(_cl2>200&&(cleanedMessages[_mi2].tool_call_id||cleanedMessages[_mi2].name)){
+        var _alreadySent=cleanedMessages[_mi2]._sentToApi;
+        if(!_alreadySent){
+          // ★ 首次发送 → 标记已发送，保留原始内容给 API
+          cleanedMessages[_mi2]._sentToApi=true;
+          if(messages[_mi2])messages[_mi2]._sentToApi=true;
+          continue;
+        }
+        // ★ 已发送过 → 精炼为引导语句（跨轮降级）
         var _tname=cleanedMessages[_mi2].name||'';
         var _paths=[];var _bpath='';
         var _pm=(cleanedMessages[_mi2].content||'').match(/\/[\w\/\.\-\u4e00-\u9fff]+/g);
@@ -8985,7 +8994,7 @@ function _buildLLMRequest(messages,tools,stream,source){
         cleanedMessages[_mi2]._tokens=_estimateTokens(_guide);
         messages[_mi2].content=_guide;  // ★ 持久化：精炼结果写回 messages，跨轮 KV 命中
         messages[_mi2]._tokens=cleanedMessages[_mi2]._tokens;
-        debugLogger.warn(' 精炼: '+_tname+'('+(_cl2/1000).toFixed(0)+'K)→引导语句');
+        debugLogger.warn(' 跨轮精炼: '+_tname+'('+(_cl2/1000).toFixed(0)+'K)→引导语句');
       }
     }
     _estMsgTotal=0;
