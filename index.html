@@ -8967,8 +8967,8 @@ function _buildLLMRequest(messages,tools,stream,source){
     }
     // ★ 跨轮精炼：N-3轮保留原始内容，N-3轮之前的旧结果降级为引导语句
     for(var _mi2=0;_mi2<cleanedMessages.length;_mi2++){
-      var _cl2=(cleanedMessages[_mi2].content||'').length;
-      if(_cl2>200&&(cleanedMessages[_mi2].tool_call_id||cleanedMessages[_mi2].name)){
+       var _cl2=_estimateTokens(cleanedMessages[_mi2].content||'');
+       if(_cl2>500000&&(cleanedMessages[_mi2].tool_call_id||cleanedMessages[_mi2].name)){
         var _sentCount=cleanedMessages[_mi2]._sentCount||0;_sentCount++;
         cleanedMessages[_mi2]._sentCount=_sentCount;
         if(messages[_mi2])messages[_mi2]._sentCount=_sentCount;
@@ -8983,14 +8983,14 @@ function _buildLLMRequest(messages,tools,stream,source){
         if(_pm){for(var _pi=0;_pi<Math.min(_pm.length,3);_pi++){if(_paths.indexOf(_pm[_pi])<0)_paths.push(_pm[_pi]);}_bpath=_pm[0];}
         var _guide='[已精炼] ';
         if(_tname==='filesystem'){_guide+='文件在文件系统中 | 路径:'+(_paths.join(', ')||_bpath||'未知')+' | 用 filesystem action="read" path="'+(_bpath||'/')+'\" 重新读取完整内容';}
-        else if(_tname==='search'){_guide+='网络搜索结果('+(_cl2/1000).toFixed(0)+'K字符) | 可用 search 重新搜索';}
-        else if(_tname==='fuzzy_search'){_guide+='模糊搜索结果('+(_cl2/1000).toFixed(0)+'K字符) | 文件:'+(_bpath||'未知')+' | 可用 fuzzy_search 重新搜索';}
-        else if(_tname==='semantic_memory'){_guide+='历史对话片段('+(_cl2/1000).toFixed(0)+'K字符) | 可用 semantic_memory 重新搜索';}
-        else if(_tname==='longterm_memory'){_guide+='笔记内容('+(_cl2/1000).toFixed(0)+'K字符) | 可用 longterm_memory action="query" 或 action="get" 重新获取';}
-        else if(_tname==='knowledge_base'){_guide+='知识库条目('+(_cl2/1000).toFixed(0)+'K字符) | 可用 knowledge_base action="query" 或 action="get" 重新获取';}
+         else if(_tname==='search'){_guide+='网络搜索结果('+(_cl2/1000).toFixed(0)+'K tokens) | 可用 search 重新搜索';}
+         else if(_tname==='fuzzy_search'){_guide+='模糊搜索结果('+(_cl2/1000).toFixed(0)+'K tokens) | 文件:'+(_bpath||'未知')+' | 可用 fuzzy_search 重新搜索';}
+         else if(_tname==='semantic_memory'){_guide+='历史对话片段('+(_cl2/1000).toFixed(0)+'K tokens) | 可用 semantic_memory 重新搜索';}
+         else if(_tname==='longterm_memory'){_guide+='笔记内容('+(_cl2/1000).toFixed(0)+'K tokens) | 可用 longterm_memory action="query" 或 action="get" 重新获取';}
+         else if(_tname==='knowledge_base'){_guide+='知识库条目('+(_cl2/1000).toFixed(0)+'K tokens) | 可用 knowledge_base action="query" 或 action="get" 重新获取';}
         else if(_tname==='skill_manager'){_guide+='技能清单 | 可用 skill_manager action="query" 或 action="list" 重新查看';}
         else if(_tname==='precise_time'){_guide+=_tname+'结果 | 可重新调用';}
-        else{_guide+=_tname+'结果('+(_cl2/1000).toFixed(0)+'K字符)'+(_paths.length>0?' | 路径:'+_paths.join(', '):'')+' | 可重新调用获取完整内容';}
+         else{_guide+=_tname+'结果('+(_cl2/1000).toFixed(0)+'K tokens)'+(_paths.length>0?' | 路径:'+_paths.join(', '):'')+' | 可重新调用获取完整内容';}
         cleanedMessages[_mi2].content=_guide;
         cleanedMessages[_mi2]._tokens=_estimateTokens(_guide);
         messages[_mi2].content=_guide;  // ★ 持久化：精炼结果写回 messages，跨轮 KV 命中
