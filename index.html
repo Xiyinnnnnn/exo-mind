@@ -4113,23 +4113,26 @@ async function _compressOldMessages(messages,modelMaxTokens){
   var rawText=compressItems.join('\n---\n');
 
   // ★ 工具感知摘要提示 + 动态 max_tokens（最大384，按需缩减）
-  var systemPrompt='[ROLE] 结构化摘要生成器\n'+
-    '[THINK] ▸ P1 扫描轮次 — 逐条过 user/assistant/tool\n'+
-    '▸ P2 提取关键事实 — 用户意图/助手动作/工具结果/决策/结论\n'+
-    '▸ P3 按4类组织 — 已完成步骤/关键决策/当前状态/未解决问题\n'+
+  var systemPrompt='[ROLE] 结构化三通道摘要生成器 | [LANG] zh-CN\n'+
+    '[THINK] ▸ P1 扫描轮次 — 按 user/assistant/tool 分布\n'+
+    '▸ P2 提取3通道 — 执行迹(trace)/推理链(chain)/关键数据(data)\n'+
+    '▸ P3 按通道组织 — trace+chain+data 交错排列保持时序\n'+
     '▸ P4 交叉去重 — 同类信息合并，保留路径/ID/exitCode\n'+
-    '[MUST] 工具结果注明"filesystem read可恢复(路径:...)"。关键数据不丢。\n'+
-    '[OUTPUT] 结构化Markdown | [MAX_TOKENS] 800\n'+
+    '[MUST] 每工具结果必含exitCode或路径。关键数据必标来源。推理链保留决策原因。\n'+
+    '[MUST_NOT] 不编造不存在的工具调用。不篡改原始数值。不遗漏已完成的步骤。不在摘要中引入新信息。\n'+
+    '[OUTPUT] 三通道Markdown | [MAX_TOKENS] 1200\n'+
     '[OUTPUT_FORMAT]\n'+
-    '## 已完成步骤\n- [工具名] 操作描述 | 结果路径/ID\n\n'+
-    '## 关键决策\n- 已确定的技术方案/结论/数据\n\n'+
-    '## 当前状态\n- 对话进度/已完成部分/剩余工作\n\n'+
-    '## 未解决问题\n- 待办/未回答的问题\n'+
+    '## 执行迹 (Trace)\n- [工具名] 操作 | exitCode:0/路径\n\n'+
+    '## 推理链 (Chain)\n- [决策] 选择理由/方案对比 | score\n\n'+
+    '## 关键数据 (Data)\n- 指标名: 值 (来源/时间)\n\n'+
+    '## 待办 (Open)\n- 未完成/待处理\n'+
     '<EXAMPLE>\n'+
-    '## 已完成步骤\n- [search] 搜索2026年GDP，获国家统计局数据\n- [filesystem] 创建 /data/gdp.csv，写入GDP数据\n\n'+
-    '## 关键决策\n- 采用柱状图展示近5年GDP趋势\n- 确定使用Python matplotlib绘图\n\n'+
-    '## 当前状态\n- 数据已下载，图表代码已生成\n\n'+
-    '## 未解决问题\n- 缺少2026年Q4数据，需补充\n</EXAMPLE>';
+    '## 执行迹 (Trace)\n- [search] 2025GDP增长率 | 获取国家统计局页面\n- [code_runner] /analysis.py | exitCode:0 | 输出: 增长率3.2%\n\n'+
+    '## 推理链 (Chain)\n- [决策] 因search数据不全，改用calculator从原始数据重算\n- [决策] 方案A分数0.65 < 方案B分数0.82，选B\n\n'+
+    '## 关键数据 (Data)\n- GDP增长率: 3.2% (国家统计局, 2025)\n- 温度阈值: 80°C (用户要求)\n\n'+
+    '## 待办 (Open)\n- 未完成：暂无\n'+
+    '</EXAMPLE>\n'+
+    '<REMINDER> 严格遵循OUTPUT_FORMAT。不编造数据。不遗漏关键信息。</REMINDER>';
   var _compInputEst=_estimateTokens(systemPrompt+rawText);
   var _compMaxTokens=Math.min(2000,Math.max(400,1048565-_compInputEst-200));
 
@@ -11303,9 +11306,24 @@ async function toolFlowMode(args){
   _setFlowSession(sess);
   await _saveFlowSession();
   try{await createFile(workingDir+'.gitkeep','');}catch(e){}
-  return JSON.stringify({ok:true,message:'心流模式已启动。任务转交监工Agent。',workingDir:workingDir});
-}
 
+  // ★ 同步阻塞执行心流，完成后直接作为该工具的结果返回
+  var _fsCs=_ensureConvState(convId);
+  await processFlowTurn(sess.task,_fsCs,currentTaskId);
+  // processFlowTurn 结束时设置了 idle，恢复 processing 状态（LLM循环还在继续）
+  setStatus('processing');
+  // ★ 心流完成，构建三通道结构化摘要作为工具结果返回
+  if(sess.delivered&&sess.active===false){
+    var _todoItems=(_getTodos(convId)||{}).items||[];
+    var _trace=[],_chain=[],_open=[];
+    for(var _ti=0;_ti<_todoItems.length;_ti++){var _it=_todoItems[_ti];if(_it.status==='done'){_trace.push('['+_it.id+'] '+_it.desc+(_it.evidence?' | '+_it.evidence:''));}else if(_it.status==='failed'){_open.push('['+_it.id+'] '+_it.desc+' | 受阻: '+(_it.reason||''));}}
+    if(sess.deliveryMessage)_chain.push('最终方案 | 质量:'+(sess.bestScore*100).toFixed(0)+'%');
+    var structured='心流已完成，以下是执行结果摘要（主Agent据此向用户汇报）：\n\n## 执行迹 (Trace)\n'+(_trace.length?'- '+_trace.join('\n- '):'(无)')+'\n\n## 推理链 (Chain)\n'+(_chain.length?'- '+_chain.join('\n- '):'(自动迭代)')+'\n\n## 关键数据 (Data)\n- 迭代: '+sess.iteration+'轮\n- 质量评分: '+(sess.bestScore*100).toFixed(0)+'%\n- 交付目录: '+sess.workingDir+'\n\n## 待办 (Open)\n'+(_open.length?'- '+_open.join('\n- '):'(无)');
+    if(sess.deliveryMessage)structured+='\n\n## 交付快照\n'+sess.deliveryMessage;
+    return '---tool:flow_mode ok 0ms '+structured.length+'ch structured---\n'+structured;
+  }
+  return JSON.stringify({ok:true,message:'心流模式已启动（未交付）',workingDir:workingDir});
+}
 async function toolFlowNoop(type){
   return JSON.stringify({ok:true,processed_in_supervisor_loop:true,type:type});
 }
@@ -16031,7 +16049,6 @@ async function processUserMessage(userText,taskId){
   // 无需压缩 → 完全静默，无 DOM 操作
   var _preUserMessages = messages.slice();
 
-  // ★ 技能/工具推荐以 _injected user 消息注入到真正用户消息的上方（尾部效应）
   var triggered = getTriggeredSkillFragments(userText||'');
   if(triggered.length > 0){
     messages.push({
@@ -17209,11 +17226,11 @@ async function processFlowTurn(userText, cs, taskId){
     if(session.phase==='executing'){
       await flowExecuteLoop(session, cs, taskId, messagesDiv, convId);
     }
-
   }catch(e){
     debugLogger.error('心流处理异常: '+e.message);
     if(e.message==='用户已中止'){
-      // ★ 不置 active=false，保持流。只清 stop 标志让下一轮能继续
+      // 清理会话状态，防止 active=true 残留导致卡死
+      if(session){session.active=false;session.phase='aborted';_setFlowSession(session);}
       cs.stopRequested=false;
     }
   }
@@ -17222,28 +17239,6 @@ async function processFlowTurn(userText, cs, taskId){
   updateSendButton();
   if(messagesDiv)messagesDiv.scrollTop=messagesDiv.scrollHeight;
 
-  // 心流交付后唤醒根Agent
-  if(session.delivered&&!session.active){
-    var wakeSession=session;
-    setTimeout(function(){
-      if(!wakeSession||!wakeSession.delivered)return;
-      var summary='心流模式已完成。\n任务: '+wakeSession.task+'\n迭代: '+wakeSession.iteration+'轮\n最终质量: '+(wakeSession.bestScore*100).toFixed(0)+'%\n交付物: '+wakeSession.workingDir;
-      if(wakeSession.deliveryMessage)summary+='\n\n'+wakeSession.deliveryMessage;
-      var cs2=_ensureConvState(currentConversationId);
-      if(!cs2||cs2.stopRequested)return;
-      flowSession=null;
-      // 直接追加 tool_result 到根 messages，不调用 processUserMessage
-      var rootMessages = cs2.messages||[];
-      rootMessages.push({role:'tool',tool_call_id:'flow_wakeup_'+Date.now(),content:summary});
-      // ★ 上下文保真：标记跳过IndexedDB重建，直接继承cs.messages
-      window._flowWakeupMessages = rootMessages.slice();
-      window._skipAddUser=true;
-      processUserMessage(summary,cs2,'flow_wakeup_'+Date.now());
-      window._skipAddUser=false;
-      window._flowWakeupMessages = null;
-
-    },200);
-  }
 }
 
 // ===== 全局辅助：审查-修正内嵌气泡链（主Agent）=====
