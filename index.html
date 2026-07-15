@@ -45,6 +45,7 @@ body{
 .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-left:8px;background:#2ecc71}
 .status-dot.idle{background:#2ecc71}
 .status-dot.processing{background:#f39c12;animation:pulse 1s infinite}
+.status-dot.flow{background:#9c27b0;animation:pulse 1s infinite}
 .status-dot.error{background:#e74c3c}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 .toolbar-left{display:flex;align-items:center;gap:6px}
@@ -3960,7 +3961,7 @@ function resetFlowSession(workingDir){
     task:'', criteria:[], qualityThreshold:0.92, workingDir:workingDir||'/flow/'+Date.now()+'/',
     phase:'init', active:false, delivered:false, iteration:0, goals:[],
     currentVersion:1, stableVersion:1, abandonedVersions:[], abandonedRoutes:[],
-    mainAgentSessions:[], currentMainCtxIdx:0, supervisorMessages:null,
+    mainAgentSessions:[], currentMainCtxIdx:0, supervisorMessages:[],
     rootSystemPrompt:'', deliveryMessage:'', bestScore:0, startTime:0
   };
   _setFlowSession(sess);
@@ -11306,12 +11307,47 @@ async function toolFlowMode(args){
   _setFlowSession(sess);
   await _saveFlowSession();
   try{await createFile(workingDir+'.gitkeep','');}catch(e){}
-
+  // ★ 记录心流气泡起始位置，用于后续折叠
+  var _msgList = getConvMessagesList(convId);
+  var _preFlowCount = _msgList ? _msgList.childElementCount : 0;
   // ★ 同步阻塞执行心流，完成后直接作为该工具的结果返回
   var _fsCs=_ensureConvState(convId);
   await processFlowTurn(sess.task,_fsCs,currentTaskId);
   // processFlowTurn 结束时设置了 idle，恢复 processing 状态（LLM循环还在继续）
   setStatus('processing');
+  // ★ 折叠心流内部气泡（避免主agent回复被顶到下方）
+  if (_msgList && _msgList.childElementCount > _preFlowCount) {
+    var _flowNodes = [];
+    while (_msgList.childElementCount > _preFlowCount) {
+      _flowNodes.unshift(_msgList.removeChild(_msgList.lastChild));
+    }
+    var _wrapperId = 'flow-ctx-'+Date.now();
+    var _wrapToggle = document.createElement('div');
+    _wrapToggle.className = 'thinking-toggle';
+    _wrapToggle.textContent = '[>] 查看心流执行过程';
+    _wrapToggle.setAttribute('data-target', _wrapperId);
+    _wrapToggle.setAttribute('data-expand-label', '[>] 查看心流执行过程');
+    _wrapToggle.setAttribute('data-collapse-label', '[v] 收起心流执行过程');
+    var _wrapDiv = document.createElement('div');
+    _wrapDiv.id = _wrapperId;
+    _wrapDiv.style.cssText = 'border-left:3px solid #9c27b0;padding:8px 12px;margin:6px 0;font-size:12px;line-height:1.5;color:var(--color-text-secondary);background:rgba(79,110,247,0.04);border-radius:0 var(--radius-sm) var(--radius-sm) 0;display:none';
+    _wrapDiv.style.display = 'none';
+    // 自定义 toggle 事件：展开/收起，不受 .thinking-block 的 max-height 限制
+    _wrapToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var _isHidden = _wrapDiv.style.display === 'none';
+      _wrapDiv.style.display = _isHidden ? 'block' : 'none';
+      _wrapToggle.textContent = _isHidden
+        ? _wrapToggle.getAttribute('data-collapse-label')
+        : _wrapToggle.getAttribute('data-expand-label');
+    });
+    for (var _fi = 0; _fi < _flowNodes.length; _fi++) {
+      _wrapDiv.appendChild(_flowNodes[_fi]);
+    }
+    _msgList.appendChild(_wrapToggle);
+    _msgList.appendChild(_wrapDiv);
+    _msgList.scrollTop = _msgList.scrollHeight;
+  }
   // ★ 心流完成，构建三通道结构化摘要作为工具结果返回
   if(sess.delivered&&sess.active===false){
     var _todoItems=(_getTodos(convId)||{}).items||[];
@@ -11347,7 +11383,7 @@ async function toolHelp(args){
     for(var i=0;i<keys.length;i++){
       var t=TOOL_REGISTRY[keys[i]];
       if(t.disabled)continue;
-      if(t.flow_role==='supervisor'||t.flow_role==='root')continue;
+      if(t.flow_role==='supervisor')continue;
       var searchText=t.name+' '+(t.description||'')+' '+(TOOL_DOCS[t.name]||'').substring(0,500);
       var sim=0;
       if(queryEmb){
@@ -11391,7 +11427,7 @@ async function toolHelp(args){
     for(var i=0;i<keys.length;i++){
       var t=TOOL_REGISTRY[keys[i]];
       if(t.disabled)continue;
-      if(t.flow_role==='supervisor'||t.flow_role==='root')continue;
+      if(t.flow_role==='supervisor')continue;
       var isActive=_isToolActive(convId,t.name);
       var statusIcon=isActive?' 已载入':' 未载入';
       var desc=(t.description||'').replace(/\|/g,'\\|').substring(0,80);
@@ -15284,7 +15320,7 @@ if(btnSkillEditSave)btnSkillEditSave.addEventListener('click',async function(){
 
 function buildSystemPromptWithSkills(role){
   var parts=[];
-  var toolsDesc=getToolsDescription(role||'');
+  var toolsDesc=getToolsDescription(role||'root');
 
 
   // 静态部分在前（最大化KV-cache命中率）
@@ -16083,7 +16119,7 @@ async function processUserMessage(userText,taskId){
   try{
     // 【重构】主对话循环（含工具调用）— 所有轮次均传递 tools，支持标准 multi-turn function calling
     // 活跃工具集在循环外计算一次，避免每轮重复构建
-    var activeTools=getActiveTools();
+    var activeTools=getActiveTools('root');
     var toolResultHistory=[]; // 用于追踪工具执行状态，提供给用户可见的进度
     // ★ RAF节流：每帧最多一次渲染+一次滚动，仅近底时自动跟底
     var _renderPending=false,_scrollPending=false,_latestAgentContent='',_userScrolledUp=false;
@@ -16364,7 +16400,7 @@ async function processUserMessage(userText,taskId){
           try{
             var _hArgs=parseToolCallArguments(pendingToolCalls[hpt]);
             if(_hArgs.action==='set'||_hArgs.action==='unset'){
-              activeTools=getActiveTools();
+               activeTools=getActiveTools('root');
               messages[0].content=_buildFullSystemPrompt(userText);
               debugLogger.info(' 工具集已刷新（help '+_hArgs.action+'），活跃工具数:'+activeTools.length);
             }
@@ -16663,7 +16699,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
                 try{
                   var _hArgs=parseToolCallArguments(critPending[_hpt]);
                   if(_hArgs.action==='set'||_hArgs.action==='unset'){
-                    activeTools=getActiveTools();
+                     activeTools=getActiveTools('root');
                     debugLogger.info(' [审查] 工具集已刷新（help '+_hArgs.action+'），活跃工具数:'+activeTools.length);
                   }
                 }catch(e){}
@@ -16871,7 +16907,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
                 try{
                   var _hArgs=parseToolCallArguments(revPending[_hpt]);
                   if(_hArgs.action==='set'||_hArgs.action==='unset'){
-                    activeTools=getActiveTools();
+                     activeTools=getActiveTools('root');
                     debugLogger.info(' [修正] 工具集已刷新（help '+_hArgs.action+'），活跃工具数:'+activeTools.length);
                   }
                 }catch(e){}
@@ -18169,7 +18205,7 @@ async function flowDeliver(session, cs, messagesDiv){
 
   session.active=false;
   session.phase='done';
-  flowSession=session;
+  _setFlowSession(session);
 }
 
 function _addFlowAgentBubble(message, subphase, messagesDiv){
@@ -20185,6 +20221,7 @@ function initEventBindings(){
         var bid=t.getAttribute('data-target');
         var blk=t.closest('.message.agent');
         if(blk)blk=blk.querySelector('[id="'+bid+'"]');
+        if(!blk)blk=document.getElementById(bid);  // 心流折叠等顶层toggle兜底
         if(blk)blk.classList.toggle('collapsed');
         var collapsed=blk&&blk.classList.contains('collapsed');
         t.textContent=collapsed?(t.getAttribute('data-expand-label')||'[>] 查看思考过程'):(t.getAttribute('data-collapse-label')||'[v] 收起思考过程');
@@ -20952,42 +20989,79 @@ async function switchConversation(convId,forceSwitch){
       }
       var curBranch=bd._branches[bd._currentBranchId];
       var branchItems=(curBranch&&curBranch.items)||[];
-      if(!branchItems.length){
-        msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>请开始对话。</p></div>';
-      }else{
+      if(branchItems.length){
+        // ★ 心流感知渲染：检测到包含 flow_mode 摘要的 assistant 消息后，
+        //   后续的 .message.agent 兄弟缓冲起来，渲染完毕时自动折叠
+        var _flowBuf=null;
         for(var mi=0;mi<branchItems.length;mi++){
           var m=branchItems[mi];
-          if(m.role==='user'){var _div=document.createElement('div');_div.className='message user';_div.innerHTML='<div class="message-content">'+sanitizeArtifactHTML(m.content||'')+'</div>';var _tsD=document.createElement('div');_tsD.className='message-timestamp';_tsD.setAttribute('data-ts',m.createdAt||Date.now());_tsD.textContent=_timeAgo(m.createdAt||Date.now());_div.appendChild(_tsD);_addMsgActions(_div,true);msgList.appendChild(_div);}
-          else if(m.role==='assistant'||m.role==='agent'){
+          if(m.role==='user'){
+            if(_flowBuf){_finishFlowWrap(_flowBuf,msgList);_flowBuf=null;}
+            var _div=document.createElement('div');_div.className='message user';_div.innerHTML='<div class="message-content">'+sanitizeArtifactHTML(m.content||'')+'</div>';var _tsD=document.createElement('div');_tsD.className='message-timestamp';_tsD.setAttribute('data-ts',m.createdAt||Date.now());_tsD.textContent=_timeAgo(m.createdAt||Date.now());_div.appendChild(_tsD);_addMsgActions(_div,true);msgList.appendChild(_div);
+          }else if(m.role==='assistant'||m.role==='agent'){
             var div=document.createElement('div');
             div.className='message agent';
             div.innerHTML=sanitizeArtifactHTML(m.content||'');
-            // 恢复时间戳：更新已存在的，不新增
             var _oldTs=div.querySelector('.message-timestamp');
             if(_oldTs){_oldTs.setAttribute('data-ts',m.createdAt||Date.now());_oldTs.textContent=_timeAgo(m.createdAt||Date.now());}
             else{var _tsN=document.createElement('div');_tsN.className='message-timestamp';_tsN.setAttribute('data-ts',m.createdAt||Date.now());_tsN.textContent=_timeAgo(m.createdAt||Date.now());div.appendChild(_tsN);}
             var cd=div.querySelector('.message-content');
             if(!cd){msgList.appendChild(div);continue;}
             var dlBtns=cd.querySelectorAll('[data-filename]');
-            for(var dbi=0;dbi<dlBtns.length;dbi++){
-              dlBtns[dbi].onclick=function(e){e.stopPropagation();_downloadRecentFile(this);};
-            }
+            for(var dbi=0;dbi<dlBtns.length;dbi++){dlBtns[dbi].onclick=function(e){e.stopPropagation();_downloadRecentFile(this);};}
             var body=cd.querySelector('.msg-body');
-            if(!body){
-              body=document.createElement('div');
-              body.className='msg-body';
-              while(cd.firstChild){body.appendChild(cd.firstChild);}
-              cd.appendChild(body);
-            }
+            if(!body){body=document.createElement('div');body.className='msg-body';while(cd.firstChild){body.appendChild(cd.firstChild);}cd.appendChild(body);}
             _addMsgActions(div,false);
+            if(_flowBuf){
+              _flowBuf.nodes.push(div);
+              if((m.content||'').indexOf('---tool:flow_mode ok')>=0||(m.content||'').indexOf('心流已完成')>=0)_flowBuf._hasSummary=true;
+              continue;
+            }
+            var _txt=(m.content||'');
+            if((_txt.indexOf('flow_mode')>=0||_txt.indexOf('"flow_mode"')>=0)&&(_txt.indexOf('---tool:flow_mode ok')>=0||(_txt.indexOf('心流已完成')>=0&&_txt.indexOf('## 执行迹')>=0))){
+              msgList.appendChild(div);
+              if(cd)_injectCodeCopyButtons(cd);
+              _flowBuf={toggle:null,wrapDiv:null,nodes:[],_hasSummary:true};
+              continue;
+            }
             msgList.appendChild(div);
             if(cd)_injectCodeCopyButtons(cd);
           }
         }
-        while(targetState._container.firstChild){
-          msgList.appendChild(targetState._container.firstChild);
-        }
+        if(_flowBuf){_finishFlowWrap(_flowBuf,msgList);_flowBuf=null;}
+      }else{
+        msgList.innerHTML='<div class="welcome-message"><h2>Exo</h2><p>浏览器端全栈智能体。</p><p>请开始对话。</p></div>';
       }
+      // ★ 心流折叠辅助函数（在 if/else 之后，确保语法闭合）
+      function _finishFlowWrap(buf,msgList){
+        if(!buf||!buf.nodes.length||!msgList)return;
+        var wrapperId='flow-ctx-'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
+        var toggle=document.createElement('div');
+        toggle.className='thinking-toggle';
+        toggle.textContent='[>] 查看心流执行过程';
+        toggle.setAttribute('data-target',wrapperId);
+        toggle.setAttribute('data-expand-label','[>] 查看心流执行过程');
+        toggle.setAttribute('data-collapse-label','[v] 收起心流执行过程');
+        var wrap=document.createElement('div');
+        wrap.id=wrapperId;
+        wrap.style.cssText='border-left:3px solid #9c27b0;padding:8px 12px;margin:6px 0;font-size:12px;line-height:1.5;color:var(--color-text-secondary);background:rgba(79,110,247,0.04);border-radius:0 var(--radius-sm) var(--radius-sm) 0;display:none';
+        toggle.addEventListener('click',function(e){
+          e.stopPropagation();
+          var wd=document.getElementById(this.getAttribute('data-target'));
+          if(!wd)return;
+          var isHidden=wd.style.display==='none';
+          wd.style.display=isHidden?'block':'none';
+          this.textContent=isHidden
+            ? this.getAttribute('data-collapse-label')
+            : this.getAttribute('data-expand-label');
+        });
+        for(var fi=0;fi<buf.nodes.length;fi++)wrap.appendChild(buf.nodes[fi]);
+        msgList.appendChild(toggle);
+        msgList.appendChild(wrap);
+        buf.toggle=toggle;
+        buf.wrapDiv=wrap;
+      }
+
       _restoreRenderArtifacts(msgList);
       var _savedScroll=parseInt(localStorage.getItem('exo_scroll_'+convId));
       requestAnimationFrame(function(){msgList.scrollTop=targetState._scrollPos||_savedScroll||msgList.scrollHeight;});
@@ -21024,7 +21098,7 @@ function _collectBubbles(msgList){
       entry.content=clone.innerHTML||'';
       // ★ 代理 cleanContent：从完整气泡克隆，剔除思考/UI噪声，保留回答正文+工具结果
       var _acClone=b.cloneNode(true);
-      var _acStrip=_acClone.querySelectorAll('.thinking-block,.thinking-toggle,.message-timestamp,.msg-actions,.code-copy-btn,.message-files-card');
+      var _acStrip=_acClone.querySelectorAll('.thinking-block,.thinking-toggle,.tool-result-toggle,.tool-result-block,.message-timestamp,.msg-actions,.code-copy-btn,.message-files-card');
       for(var _csi=_acStrip.length-1;_csi>=0;_csi--){var _cs=_acStrip[_csi];if(_cs.parentNode)_cs.parentNode.removeChild(_cs);}
       entry.cleanContent=(_acClone.textContent||_acClone.innerText||'').replace(/\n{4,}/g,'\n\n\n').trim();
       // GRADE回落：仅补 content（显示用HTML），cleanContent 已由上述逻辑正确计算
@@ -21055,6 +21129,80 @@ function _getBranchData(convId){
     state._branchOrder=[bid];
   }
   return state;
+}
+
+// ★ 恢复会话时折叠心流气泡（刷新页面后折叠持久化）
+//   restore 时 role:'tool' 不会渲染，结构化摘要通过 addToolResultBlock
+//   渲染在 agentMsgDiv 内部。因此检测到包含摘要的 agentMsgDiv 后，
+//   向前收集其后的 .message.agent 兄弟元素即为心流执行气泡。
+function _collapseFlowMessagesOnRestore(msgList){
+  if(!msgList)return;
+  var children=msgList.children;
+  for(var ci=0;ci<children.length;ci++){
+    var c=children[ci];
+    if(!c.classList||!c.classList.contains('message'))continue;
+    var cd=c.querySelector('.message-content');
+    if(!cd)continue;
+    var txt=cd.textContent||'';
+    // 检测 agentMsgDiv 内部包含的结构化摘要（flow_mode 工具结果 + 完成通知）
+    if(txt.indexOf('---tool:flow_mode ok')>=0||(txt.indexOf('心流已完成')>=0&&txt.indexOf('## 执行迹')>=0)){
+      // 检查是否已有 wrapper（已折叠过），通过下一个兄弟判断
+      var nextEl=c.nextElementSibling;
+      if(nextEl&&nextEl.id&&nextEl.id.indexOf('flow-ctx-')===0)continue;
+      // 从 ci+1 开始收集 .message.agent 兄弟（心流执行气泡）
+      var flowBubbles=[];
+      for(var si=ci+1;si<children.length;si++){
+        var sc=children[si];
+        if(!sc.classList||!sc.classList.contains('message'))continue;
+        if(sc.classList.contains('user'))break;  // 遇到用户消息停止
+        flowBubbles.push(sc);
+      }
+      if(flowBubbles.length===0)continue;
+      // 获取参考节点：最后一个气泡之后的兄弟（未参与折叠的那个元素）
+      var lastBubble=flowBubbles[flowBubbles.length-1];
+      var refNode=lastBubble.nextElementSibling;
+      // 收集气泡元素（从 DOM 移除）
+      var flowNodes=[];
+      for(var fi=0;fi<flowBubbles.length;fi++){
+        var fb=flowBubbles[fi];
+        flowNodes.push(fb);
+        msgList.removeChild(fb);
+      }
+      var wrapperId='flow-ctx-'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
+      var wrapToggle=document.createElement('div');
+      wrapToggle.className='thinking-toggle';
+      wrapToggle.textContent='[>] 查看心流执行过程';
+      wrapToggle.setAttribute('data-target',wrapperId);
+      wrapToggle.setAttribute('data-expand-label','[>] 查看心流执行过程');
+      wrapToggle.setAttribute('data-collapse-label','[v] 收起心流执行过程');
+      var wrapDiv=document.createElement('div');
+      wrapDiv.id=wrapperId;
+      wrapDiv.style.cssText='border-left:3px solid #9c27b0;padding:8px 12px;margin:6px 0;font-size:12px;line-height:1.5;color:var(--color-text-secondary);background:rgba(79,110,247,0.04);border-radius:0 var(--radius-sm) var(--radius-sm) 0;display:none';
+      // 自定义 toggle 事件
+      wrapToggle.addEventListener('click',function(e){
+        e.stopPropagation();
+        var wd=document.getElementById(this.getAttribute('data-target'));
+        if(!wd)return;
+        var isHidden=wd.style.display==='none';
+        wd.style.display=isHidden?'block':'none';
+        this.textContent=isHidden
+          ? this.getAttribute('data-collapse-label')
+          : this.getAttribute('data-expand-label');
+      });
+      for(var fi=0;fi<flowNodes.length;fi++)wrapDiv.appendChild(flowNodes[fi]);
+      // 原位插入：第一个气泡原本在哪，wrapper 就插在哪
+      if(refNode){
+        msgList.insertBefore(wrapToggle,refNode);
+        msgList.insertBefore(wrapDiv,refNode);
+      }else{
+        msgList.appendChild(wrapToggle);
+        msgList.appendChild(wrapDiv);
+      }
+      msgList.scrollTop=msgList.scrollHeight;
+      // 跳到 wrapper 之后继续扫
+      ci=ci+1;
+    }
+  }
 }
 
 // ★ 分支消息存盘
