@@ -854,8 +854,10 @@ button,label,[role="button"],.file-upload-btn{
       <div class="section-body collapsed">
         <div class="settings-field"><label style="display:flex;align-items:center;gap:10px;justify-content:space-between"><span>自动进化</span><label class="toggle-switch"><input type="checkbox" id="settingEvoEnabled" checked><span class="toggle-slider"></span></label></label></div>
         <div class="settings-field"><button class="btn btn-outline" id="btnReflectNow" style="width:100%"> 立即反思</button></div>
-        <div class="settings-field"><button class="btn btn-outline" id="btnUploadSkillSettings" style="width:100%"> 上传Skill文件</button></div>
-        <input type="file" id="skillFileInputSettings" hidden accept=".json">
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" id="btnSkillAdd" style="flex:1;font-size:12px">+ 手动创建</button>
+          <label class="btn btn-outline btn-sm" style="flex:1;font-size:12px;cursor:pointer;text-align:center;margin:0"> 上传文件<input type="file" id="skillFileInputSettings" accept=".json" style="display:none"></label>
+        </div>
         <div class="settings-field"><label>当前技能版本</label><div id="skillVersionInfo" style="font-size:13px;color:var(--color-text-secondary)">v0 - 无技能</div></div>
         <div class="settings-field"><label>技能列表</label><div id="skillList" style="font-size:12px;max-height:150px;overflow-y:auto"></div></div>
         <div class="kb-add-form" id="skillEditForm" style="display:none">
@@ -15251,6 +15253,7 @@ function editSkill(filename){
   document.getElementById('skillEditName').value=s.name||'';
   document.getElementById('skillEditTrigger').value=s.trigger||'';
   document.getElementById('skillEditPrompt').value=s.prompt_fragment||'';
+  document.getElementById('skillEditCategory').value=s.category||'工具增强';
   skillEditForm._editFilename=filename;
   document.getElementById('btnSkillEditSave').textContent='更新';
   skillEditForm.style.display='flex';
@@ -15301,21 +15304,60 @@ if(btnSkillEditCancel)btnSkillEditCancel.addEventListener('click',function(){
 
 if(btnSkillEditSave)btnSkillEditSave.addEventListener('click',async function(){
   var filename=skillEditForm._editFilename;
-  if(!filename){showToast('无编辑目标','error');return;}
-  var s=skillCache.skills[filename];
-  if(!s){showToast('技能不存在','error');return;}
   var name=(document.getElementById('skillEditName').value||'').trim();
   var trigger=(document.getElementById('skillEditTrigger').value||'').trim();
   var prompt=(document.getElementById('skillEditPrompt').value||'').trim();
+  var category=document.getElementById('skillEditCategory').value;
   if(!name||!prompt){showToast('名称和提示片段不能为空','warning');return;}
-  s.name=name;s.trigger=trigger;s.prompt_fragment=prompt;
-  s.version=(s.version||1)+1;s.updated_at=new Date().toISOString();
-  try{
-    await updateFile('/skills/'+filename,JSON.stringify(s,null,2));
-    await refreshSkillCache();
-    skillEditForm.style.display='none';
-    showToast('技能已更新 ','success');
-  }catch(e){showToast('保存失败: '+e.message,'error');}
+  
+  if(filename){
+    // 编辑已有技能
+    var s=skillCache.skills[filename];
+    if(!s){showToast('技能不存在','error');return;}
+    s.name=name;s.trigger=trigger;s.prompt_fragment=prompt;
+    s.category=category;
+    s.version=(s.version||1)+1;s.updated_at=new Date().toISOString();
+    try{
+      await updateFile('/skills/'+filename,JSON.stringify(s,null,2));
+      await refreshSkillCache();
+      skillEditForm.style.display='none';
+      showToast('技能已更新 ','success');
+    }catch(e){showToast('保存失败: '+e.message,'error');}
+  }else{
+    // 新建技能
+    try{
+      var skillId=crypto.randomUUID();
+      var skillObj={
+        id:skillId,name:name,description:'',
+        trigger:trigger,version:1,author:'user',origin:'user',
+        editable:true,category:category,
+        prompt_fragment:prompt,
+      };
+      var newFilename=skillId+'.json';
+      var existing=await readFile('/skills/'+newFilename);
+      if(existing){
+        if(!await showConfirmDialog('Skill "'+name+'" 已存在，是否覆盖？','Skill冲突')) return;
+        await updateFile('/skills/'+newFilename,JSON.stringify(skillObj,null,2));
+      }else{
+        await createFile('/skills/'+newFilename,JSON.stringify(skillObj,null,2));
+      }
+      var indexContent=await readFile('/skills/current_version.json');
+      var index=indexContent?JSON.parse(indexContent):{version:0,active_skills:[]};
+      if(index.active_skills.indexOf(newFilename)===-1){
+        index.active_skills.push(newFilename);
+      }
+      index.version=(index.version||0)+1;
+      index.updated_at=new Date().toISOString();
+      await (indexContent?updateFile('/skills/current_version.json',JSON.stringify(index,null,2)):createFile('/skills/current_version.json',JSON.stringify(index,null,2)));
+      await refreshSkillCache();
+      if(typeof evoWorker!=='undefined'&&evoWorker){
+        evoWorker.postMessage({type:'config_update',payload:{type:'skill_added',skillId:skillId}});
+      }
+      skillEditForm.style.display='none';
+      showToast('技能已创建: '+name+' ','success');
+      debugLogger.info('用户手动创建了Skill: '+name+' ('+skillId+')');
+    }catch(e){showToast('技能创建失败: '+e.message,'error');}
+  }
 });
 
 function buildSystemPromptWithSkills(role){
@@ -19584,17 +19626,43 @@ function initEventBindings(){
     });
   }
 
-  // Skill上传（设置面板内）
-  var btnUploadSkillSettings=document.getElementById('btnUploadSkillSettings');
+  // Skill上传（设置面板内）— 上传文件到表单 + 手动创建
+  var btnSkillAdd=document.getElementById('btnSkillAdd');
   var skillFileInputSettings=document.getElementById('skillFileInputSettings');
-  if(btnUploadSkillSettings&&skillFileInputSettings){
+  var skillEditForm=document.getElementById('skillEditForm');
+  if(btnSkillAdd){
+    btnSkillAdd.addEventListener('click',function(){
+      // 清空表单，设为新建模式
+      document.getElementById('skillEditName').value='';
+      document.getElementById('skillEditTrigger').value='';
+      document.getElementById('skillEditPrompt').value='';
+      document.getElementById('skillEditCategory').value='工具增强';
+      delete skillEditForm._editFilename;
+      document.getElementById('btnSkillEditSave').textContent='创建';
+      skillEditForm.style.display='flex';
+      skillEditForm.scrollIntoView({behavior:'smooth',block:'center'});
+    });
+  }
+  if(skillFileInputSettings){
     skillFileInputSettings.addEventListener('change',function(){
       if(this.files&&this.files[0]){
-        handleSkillUpload(this.files[0]);
+        (async function(file){
+          try{
+            var text=await file.text();
+            var obj=JSON.parse(text);
+            document.getElementById('skillEditName').value=obj.name||'';
+            document.getElementById('skillEditTrigger').value=obj.trigger||'';
+            document.getElementById('skillEditPrompt').value=obj.prompt_fragment||'';
+            document.getElementById('skillEditCategory').value=obj.category||'工具增强';
+            delete skillEditForm._editFilename;
+            document.getElementById('btnSkillEditSave').textContent='创建';
+            skillEditForm.style.display='flex';
+            skillEditForm.scrollIntoView({behavior:'smooth',block:'center'});
+          }catch(e){alert('文件解析失败: '+e.message);}
+        })(this.files[0]);
         this.value='';
       }
     });
-    btnUploadSkillSettings.addEventListener('click',function(){skillFileInputSettings.click();});
   }
 
   // 设置面板内按钮
