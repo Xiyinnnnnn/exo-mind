@@ -234,6 +234,9 @@ body{
 .tool-result-toggle:hover{color:#ff9800}
 .tool-result-block{border-left:3px solid #ff9800;padding:8px 12px;margin:6px 0;font-size:12px;color:var(--color-text-secondary);background:rgba(255,152,0,0.04);border-radius:0 var(--radius-sm) var(--radius-sm) 0;max-height:300px;overflow-y:auto;white-space:pre-wrap;line-height:1.5;word-break:break-word}
 .tool-result-block.collapsed{display:none}
+/* ★ 虚拟滚动：大文件分线渲染，浏览器原生按需布局(content-visibility:auto) */
+.virtual-scroll-line{content-visibility:auto;contain-intrinsic-size:20px;white-space:pre-wrap;word-break:break-word;min-height:20px;font-family:'SF Mono',Monaco,monospace;font-size:13px;line-height:1.5;padding:0 4px}
+.virtual-scroll-line:hover{background:rgba(255,152,0,0.06)}
 /* 输入区 */
 .input-area{
   padding:8px 12px;padding-bottom:max(8px,var(--safe-area-bottom));
@@ -2019,6 +2022,50 @@ var TOOL_REGISTRY={
   'vis_network':{name:'vis_network',description:'关系图谱。nodes:[{id,label,color}] edges:[{from,to,label}] 渲染交互式网络图。',executor:'main_thread',
     parameters:{type:'object',properties:{nodes:{type:'array',items:{type:'object',properties:{id:{type:'string'},label:{type:'string'},color:{type:'string'}}}},edges:{type:'array',items:{type:'object',properties:{from:{type:'string'},to:{type:'string'},label:{type:'string'}}}},options:{type:'object',properties:{height:{type:'string',default:'400px'}}}},required:['nodes','edges']}}
 };
+
+// 工具参数校验Schema（必填参数校验）
+var TOOL_PARAM_SCHEMA={
+  'search':{required:['query']},
+  'code_runner':{requiredOneOf:['path','code']},
+  'filesystem':{'create':{required:['path']},'read':{required:['path']},'update':{required:['path','content']},'delete':{required:['path']},'rename':{required:['path','new_name']},'move':{required:['path','new_path']},'copy':{required:['path','new_path']},'append':{required:['path','content']},'insert':{required:['path','line','content']},'delete_lines':{required:['path','line']},'replace_lines':{required:['path','line','endLine','content']}},
+  'chart':{required:['type','data']},
+  'diagram':{required:['code']},
+  'table_generator':{required:['headers','rows']},
+  'word_generator':{required:['title','content']},
+  'fuzzy_search':{required:['query','mode']},
+  'calculator':{required:['expression']},
+  'help':{},
+  'skill_manager':{},
+  'semantic_memory':{required:['query']},
+  'longterm_memory':{},
+  'knowledge_base':{},
+  'mcts_plan':{required:['problem','goal']},
+  'pipeline':{},
+  'flow_mode':{},
+  'todo':{required:['action']},
+  'world_validator':{required:['action','world_id']},
+  'calendar':{required:['action']},
+  'precise_time':{},
+  'custom_api_call':{required:['endpoint']},
+  'convert_format':{required:['input_path','to_format']},
+  'geo_search':{required:['lat','lng']},
+  'geo_geocode':{required:['address']},
+  'send_email':{required:['to','subject','body']},
+  'sql_db':{required:['action']},
+  'browser_notify':{required:['title','body']},
+  'archive':{required:['action','target_path']},
+  'speech_tts':{},
+  'speech_stt':{},
+  'read_image':{required:['filename']},
+  'pdf_generate':{required:['content']},
+  'svg_animator':{required:['svg_code']},
+  'vis_network':{required:['nodes','edges']}
+};
+
+// 工具连续失败计数（累计3次后自动注入文档）
+var toolFailCount={};
+
+
 
 var _SHARED_GRADE=
 '[GRADE:L1] 简单问答\n'
@@ -3864,24 +3911,53 @@ function _getCumulativeTokens(convId){
   return _convTokenAccumulator[convId||currentConversationId]||0;
 }
 /* ===== Token持久化 (按对话隔离) ===== */
+/* ★ 双存储：IndexedDB文件 + localStorage，确保关闭浏览器后不丢失 */
+var TOKEN_LOCAL_KEY = 'exo_token_counts';
 async function _saveTokenCounts(){
   try{
     var raw=await readFile('/config/token_counts.json');
     var data=raw?JSON.parse(raw):{};
-    data[currentConversationId]=_getCumulativeTokens(currentConversationId);
+    var tokens=_getCumulativeTokens(currentConversationId);
+    data[currentConversationId]=tokens;
     var meta=await getFileMeta('/config/token_counts.json');
     if(meta)await updateFile('/config/token_counts.json',JSON.stringify(data));
     else await createFile('/config/token_counts.json',JSON.stringify(data));
-  }catch(e){}
+    // ★ 同步写入localStorage作为可靠回退（同步写入,无异步丢失风险）
+    try{localStorage.setItem(TOKEN_LOCAL_KEY,JSON.stringify(data));}catch(e){}
+  }catch(e){
+    // ★ IndexedDB失败时localStorage兜底
+    try{
+      var lsRaw=localStorage.getItem(TOKEN_LOCAL_KEY);
+      var lsData=lsRaw?JSON.parse(lsRaw):{};
+      lsData[currentConversationId]=_getCumulativeTokens(currentConversationId);
+      localStorage.setItem(TOKEN_LOCAL_KEY,JSON.stringify(lsData));
+    }catch(e2){}
+  }
 }
 async function _loadTokenCounts(){
   try{
-    var raw=await readFile('/config/token_counts.json');
-    if(raw){
-      var data=JSON.parse(raw);
-      for(var k in data)_updateTokenAccumulator(k,data[k]);
-    }
+    var data=null;
+    // ★ 优先从localStorage恢复（Quick & Reliable）
+    try{
+      var lsRaw=localStorage.getItem(TOKEN_LOCAL_KEY);
+      if(lsRaw){data=JSON.parse(lsRaw);}
+    }catch(e){}
+    // ★ 其次从IndexedDB文件恢复（可能更新更完整）
+    try{
+      var raw=await readFile('/config/token_counts.json');
+      if(raw){
+        var fileData=JSON.parse(raw);
+        // 合并：文件数据覆盖localStorage数据（文件更新更完整）
+        if(data){for(var k in fileData)data[k]=fileData[k];}
+        else{data=fileData;}
+      }
+    }catch(e){}
+    if(data){for(var k in data)_updateTokenAccumulator(k,data[k]);}
   }catch(e){}
+  // ★ 无论加载是否成功，确保当前对话有初始值
+  if(currentConversationId && !_convTokenAccumulator[currentConversationId]){
+    _convTokenAccumulator[currentConversationId]=0;
+  }
 }
 /* ===== 工具栏Token显示 & 点击压缩 ===== */
 function _updateToolbarTokenDisplay(){
@@ -4311,8 +4387,27 @@ async function kbSearch(query,limit){
     var kwMatch=0,ql=query.toLowerCase();
     if(e.title.toLowerCase().indexOf(ql)>=0)kwMatch=0.3;
     if(e.content.toLowerCase().indexOf(ql)>=0)kwMatch=Math.max(kwMatch,0.15);
+    var _shortQuery_kb=query.replace(/\s/g,'').length<8;
+    var _threshold_kb=_shortQuery_kb?0.03:0.08;
     var finalScore=sim>0?sim*0.85+kwMatch:kwMatch;
-    if(finalScore>=0.25)scored.push({entry:e,score:finalScore});
+    if(finalScore>=_threshold_kb)scored.push({entry:e,score:finalScore});
+  }
+  // Pass 2: 整句匹配结果不足时，拆词后每个词独立语义搜索
+  if(scored.length<limit){
+    var _kbTerms=splitQueryTerms(query);
+    for(var _kt=0;_kt<_kbTerms.length;_kt++){
+      var _ktEmb=null;
+      try{var _kbResp=await sendToTaskWorker('embed',{text:_kbTerms[_kt]});if(_kbResp&&_kbResp.data&&_kbResp.data.length===384)_ktEmb=_kbResp.data;}catch(e){}
+      if(!_ktEmb)continue;
+      for(var _ki=0;_ki<entries.length;_ki++){
+        var _ke=entries[_ki];
+        var _ksim=_ke.embedding&&_ke.embedding.length===384?cosineSimilarity(_ktEmb,_ke.embedding):0;
+        if(_ksim<0.03)continue;
+        var _existing=false;
+        for(var _esi=0;_esi<scored.length;_esi++){if(scored[_esi].entry.id===_ke.id){scored[_esi].score=Math.max(scored[_esi].score,_ksim);_existing=true;break;}}
+        if(!_existing)scored.push({entry:_ke,score:_ksim});
+      }
+    }
   }
   scored.sort(function(a,b){return b.score-a.score;});
   return scored.slice(0,limit);
@@ -4759,6 +4854,83 @@ function cosineSimilarity(vecA,vecB){
   if(normA===0||normB===0)return 0;
   return dotProduct/(Math.sqrt(normA)*Math.sqrt(normB));
 }
+
+// Levenshtein 编辑距离（参数名模糊匹配用）
+function levenshteinDistance(a,b){
+  var al=a.length,bl=b.length;
+  var matrix=[];
+  for(var i=0;i<=bl;i++)matrix[i]=[i];
+  for(var j=0;j<=al;j++)matrix[0][j]=j;
+  for(var i=1;i<=bl;i++){
+    for(var j=1;j<=al;j++){
+      if(b.charAt(i-1)===a.charAt(j-1))matrix[i][j]=matrix[i-1][j-1];
+      else matrix[i][j]=Math.min(matrix[i-1][j-1]+1,Math.min(matrix[i][j-1]+1,matrix[i-1][j]+1));
+    }
+  }
+  return matrix[bl][al];
+}
+
+// 参数名模糊匹配：检测未知参数名，推荐最接近的正确参数名
+function fuzzyMatchParamNames(toolName,args){
+  if(!args||typeof args!=='object')return null;
+  var _knownParams=getToolParamNames(toolName);
+  if(!_knownParams||_knownParams.length===0)return null;
+  var suggestions={};
+  var actualKeys=Object.keys(args);
+  for(var ai=0;ai<actualKeys.length;ai++){
+    var key=actualKeys[ai];
+    var isValid=false;
+    for(var pi=0;pi<_knownParams.length;pi++){
+      if(key===_knownParams[pi]){isValid=true;break;}
+    }
+    if(isValid)continue;
+    // 编辑距离匹配
+    var bestDist=99,bestMatch=null;
+    for(var pi=0;pi<_knownParams.length;pi++){
+      var dist=levenshteinDistance(key,_knownParams[pi]);
+      if(dist<bestDist){bestDist=dist;bestMatch=_knownParams[pi];}
+    }
+    if(bestMatch&&bestDist<=2)suggestions[key]=bestMatch;
+  }
+  return Object.keys(suggestions).length>0?suggestions:null;
+}
+
+// 获取工具参数名列表（从TOOL_REGISTRY提取）
+function getToolParamNames(toolName){
+  var td=TOOL_REGISTRY[toolName];
+  if(!td||!td.parameters||!td.parameters.properties)return null;
+  return Object.keys(td.parameters.properties);
+}
+
+// CJK双字词 + 英文单词 混合拆分（用于两层语义搜索的第二层）
+function splitQueryTerms(query){
+  var terms=[];
+  var i=0;
+  while(i<query.length){
+    // 跳过空白和标点
+    while(i<query.length&&!/[\u4e00-\u9fff\u3400-\u4dbfa-zA-Z0-9]/.test(query[i]))i++;
+    if(i>=query.length)break;
+    // CJK 连续块 → 生成重叠双字词
+    if(/[\u4e00-\u9fff\u3400-\u4dbf]/.test(query[i])){
+      var cjkStart=i;
+      while(i<query.length&&/[\u4e00-\u9fff\u3400-\u4dbf]/.test(query[i]))i++;
+      var cjkStr=query.substring(cjkStart,i);
+      if(cjkStr.length===1){terms.push(cjkStr);}
+      else{
+        for(var j=0;j<cjkStr.length-1;j++)terms.push(cjkStr.substring(j,j+2));
+      }
+    }
+    // 英文/数字 token
+    else{
+      var tokStart=i;
+      while(i<query.length&&/[a-zA-Z0-9]/.test(query[i]))i++;
+      terms.push(query.substring(tokStart,i));
+    }
+  }
+  return terms;
+}
+
+
 
 function smartTruncate(text,maxLen){
   if(!text||text.length<=maxLen)return text||'';
@@ -11187,14 +11359,55 @@ function _toolType(name, result) {
   }
 }
 
+// 工具参数必填校验（根据TOOL_PARAM_SCHEMA校验）
+function validateToolParams(toolName,args){
+  var _sch=TOOL_PARAM_SCHEMA[toolName];
+  if(!_sch)return null;
+  // 按action分流（filesystem等）
+  var _rules=_sch;
+  if(_sch[args.action])_rules=_sch[args.action];
+  // 检查必填参数（常规必填 or oneOf 二选一）
+  if(_rules.required){
+    for(var ri=0;ri<_rules.required.length;ri++){
+      var rp=_rules.required[ri];
+      if(args[rp]===undefined||args[rp]===null||args[rp]===''){
+        return {code:'MISSING_PARAM',param:rp,expected:'string',received:typeof args[rp],message:toolName+' 工具的 '+rp+' 参数必填',suggest:'补充 '+rp+'="值" 后再试'};
+      }
+    }
+  }
+  if(_rules.requiredOneOf){
+    var _found=false;
+    for(var oi=0;oi<_rules.requiredOneOf.length;oi++){
+      if(args[_rules.requiredOneOf[oi]]!==undefined&&args[_rules.requiredOneOf[oi]]!==null){_found=true;break;}
+    }
+    if(!_found){
+      return {code:'MISSING_PARAM',param:_rules.requiredOneOf.join('/'),expected:'至少提供一个',received:'none',message:toolName+' 必须提供 '+_rules.requiredOneOf.join(' 或 '),suggest:'补充 '+(toolName==='code_runner'?'path="/文件路径" 或 code="代码"':_rules.requiredOneOf[0]+'参数')};
+    }
+  }
+  return null;
+}
+
+
+
 async function executeTool(toolCall,artifacts){
   var toolName=toolCall.function.name;
   var toolDef=TOOL_REGISTRY[toolName];
-  if(!toolDef)return {role:'tool',tool_call_id:toolCall.id,content:'---tool:unknown err 0ms 0ch unknown---\n未知工具: '+toolName};
-  if(toolDef.disabled)return {role:'tool',tool_call_id:toolCall.id,content:'---tool:'+toolName+' err 0ms 0ch unknown---\n工具已禁用: '+toolName};
+  if(!toolDef)return {role:'tool',tool_call_id:toolCall.id,content:'---tool:unknown err 0ms 0ch unknown---\n[ERR_CODE] TOOL_NOT_FOUND\n[PARAM] toolName\n[VALUE] '+toolName+'\n[MESSAGE] 未知工具: '+toolName+'\n[SUGGEST] 使用 help action="query" query="'+toolName+'" 搜索正确工具名'};
+  if(toolDef.disabled)return {role:'tool',tool_call_id:toolCall.id,content:'---tool:'+toolName+' err 0ms 0ch unknown---\n[ERR_CODE] TOOL_DISABLED\n[MESSAGE] 工具已禁用: '+toolName+'\n[SUGGEST] 在设置中启用此工具'};
   var _t0=Date.now();
   try{
     var args=parseToolCallArguments(toolCall);
+    // 参数名模糊匹配检查
+    var _paramFixes=fuzzyMatchParamNames(toolName,args);
+    if(_paramFixes&&Object.keys(_paramFixes).length>0){
+      var _fixList=Object.keys(_paramFixes).map(function(k){return k+'\u2192'+_paramFixes[k];}).join(', ');
+      return {role:'tool',tool_call_id:toolCall.id,content:'---tool:'+toolName+' err 0ms 0ch param_error---\n[ERR_CODE] PARAM_NAME_TYPOS\n[PARAM] '+_fixList+'\n[MESSAGE] 参数名拼写错误\n[SUGGEST] 你传入的参数名有误，请使用正确的参数名: '+_fixList+'\n[DOC] help "'+toolName+'"'};
+    }
+    // 参数必填校验
+    var _validationResult=validateToolParams(toolName,args);
+    if(_validationResult){
+      return {role:'tool',tool_call_id:toolCall.id,content:'---tool:'+toolName+' err 0ms 0ch param_error---\n[ERR_CODE] '+_validationResult.code+'\n[PARAM] '+_validationResult.param+'\n[EXPECTED] '+_validationResult.expected+'\n[RECEIVED] '+_validationResult.received+'\n[MESSAGE] '+_validationResult.message+'\n[SUGGEST] '+_validationResult.suggest+'\n[DOC] help "'+toolName+'"'};
+    }
     var result;
     if(toolDef.executor==='task_worker'){
       result=await _withTimeout(executeTaskWorkerTool(toolName,args),1800000,toolName);
@@ -11204,21 +11417,24 @@ async function executeTool(toolCall,artifacts){
     var _elapsed=Date.now()-_t0;
     debugLogger.info(' '+toolName+' ('+_elapsed+'ms)');
 
+    // 工具执行成功 -> 重置失败计数
+    toolFailCount[toolName]=0;
+
     var status, typeHint, payload;
 
-    // ── 产物处理（chart/diagram/svg/table 的 HTML） ──
+    // -- 产物处理（chart/diagram/svg/table 的 HTML） --
     if(result&&typeof result==='object'&&result.html){
       artifacts.push({html:result.html,type:toolName});
       status='ok'; typeHint='html_artifact';
       payload=result.message||'工具执行完成';
     }
-    // ── 字符串 ──
+    // -- 字符串 --
     else if(typeof result==='string'){
       status=result.length===0?'empty':'ok';
       typeHint=_toolType(toolName,result);
       payload=result;
     }
-    // ── 对象 → 美化 JSON ──
+    // -- 对象 → 美化 JSON --
     else{
       status='ok'; typeHint='json';
       payload=JSON.stringify(result,null,2);
@@ -11228,7 +11444,18 @@ async function executeTool(toolCall,artifacts){
     debugLogger.error(' 工具失败: '+toolName+' | '+e.message);
     var _elapsed=Date.now()-_t0;
     status='err'; typeHint='tool_error';
-    payload=e.message+'\n\n 不确定用法请查 `help "'+toolName+'"` 获取完整文档。';
+    payload=e.message;
+    // 连续失败计数 -> 达到3次自动注入文档
+    toolFailCount[toolName]=(toolFailCount[toolName]||0)+1;
+    if(toolFailCount[toolName]>=3){
+      var _doc=TOOL_DOCS[toolName];
+      if(_doc){
+        payload+='\n\n[ERR_CODE] REPEATED_FAILURE\n你已连续 3 次调用 '+toolName+' 失败。系统已自动注入该工具完整文档，请仔细阅读后修正调用方式：\n\n'+_doc;
+      }
+      toolFailCount[toolName]=0;
+    }else{
+      payload+='\n\n[ERR_CODE] EXECUTION_ERROR\n 不确定用法请查 `help "'+toolName+'"` 获取完整文档。';
+    }
   }
 
   var header='---tool:'+toolName+' '+status+' '+_elapsed+'ms '+payload.length+'ch '+typeHint+'---';
@@ -11409,7 +11636,28 @@ async function toolHelp(args){
       if(t.name.toLowerCase().indexOf(ql)>=0)kwMatch=0.4;
       if((t.description||'').toLowerCase().indexOf(ql)>=0)kwMatch=Math.max(kwMatch,0.25);
       var finalScore=sim>0?sim*0.85+kwMatch:kwMatch;
-      if(finalScore>=0.2)scored.push({tool:t,score:finalScore});
+      if(finalScore>=0.08)scored.push({tool:t,score:finalScore});
+    }
+    // Pass 2: 整句匹配结果不足时，拆词后每个词独立语义搜索
+    if(scored.length<limit){
+      var _helpTerms=splitQueryTerms(args.query);
+      for(var _ht=0;_ht<_helpTerms.length;_ht++){
+        var _htEmb=null;
+        try{var _htResp=await sendToTaskWorker('embed',{text:_helpTerms[_ht]});if(_htResp&&_htResp.data&&_htResp.data.length===384)_htEmb=_htResp.data;}catch(e){}
+        if(!_htEmb)continue;
+          for(var _hi=0;_hi<keys.length;_hi++){
+            var _th=TOOL_REGISTRY[keys[_hi]];
+            if(_th.disabled||_th.flow_role==='supervisor')continue;
+            if(!_toolEmbeddings[_th.name]){
+            try{var _t2Resp=await sendToTaskWorker('embed',{text:(_th.name+' '+(_th.description||'')).substring(0,500)});if(_t2Resp&&_t2Resp.data&&_t2Resp.data.length===384){_toolEmbeddings[_th.name]=_t2Resp.data;}}catch(e){}
+          }
+          var _tSim=_toolEmbeddings[_th.name]?cosineSimilarity(_htEmb,_toolEmbeddings[_th.name]):0;
+          if(_tSim<0.03)continue;
+          var _existing=false;
+          for(var _esi=0;_esi<scored.length;_esi++){if(scored[_esi].tool.name===_th.name){scored[_esi].score=Math.max(scored[_esi].score,_tSim);_existing=true;break;}}
+          if(!_existing)scored.push({tool:_th,score:_tSim});
+        }
+      }
     }
     // ★ 兜底：搜索"分级指南/grade_guide"时直接返回文档
     var _ql=args.query.toLowerCase();
@@ -11547,8 +11795,27 @@ async function toolLongtermMemory(args){
       var kwMatch=0;
       var ql=query.toLowerCase();
       if(f.text.toLowerCase().indexOf(ql)>=0)kwMatch=0.4;
+      var _shortQuery_mem=query.replace(/\s/g,'').length<8;
+      var _threshold_mem=_shortQuery_mem?0.03:0.08;
       var finalScore=sim>0?sim*0.85+kwMatch:kwMatch;
-      if(finalScore>=0.25)scored.push({fact:f,score:finalScore});
+      if(finalScore>=_threshold_mem)scored.push({fact:f,score:finalScore});
+    }
+    // Pass 2: 整句匹配结果不足时，拆词后每个词独立语义搜索
+    if(scored.length<limit){
+      var _memTerms=splitQueryTerms(query);
+      for(var _mt=0;_mt<_memTerms.length;_mt++){
+        var _mtEmb=null;
+        try{var _mtResp=await sendToTaskWorker('embed',{text:_memTerms[_mt]});if(_mtResp&&_mtResp.data&&_mtResp.data.length===384)_mtEmb=_mtResp.data;}catch(e){}
+        if(!_mtEmb)continue;
+        for(var _mi=0;_mi<facts.length;_mi++){
+          var _f=facts[_mi];
+          var _msim=_f.embedding&&_f.embedding.length===384?cosineSimilarity(_mtEmb,_f.embedding):0;
+          if(_msim<0.03)continue;
+          var _existing=false;
+          for(var _esi=0;_esi<scored.length;_esi++){if(scored[_esi].fact.id===_f.id){scored[_esi].score=Math.max(scored[_esi].score,_msim);_existing=true;break;}}
+          if(!_existing)scored.push({fact:_f,score:_msim});
+        }
+      }
     }
     scored.sort(function(a,b){return b.score-a.score;});
     var top=scored.slice(0,limit);
@@ -14963,8 +15230,31 @@ async function toolSkillManager(args){
       if((sk.category||'').toLowerCase().indexOf(ql)>=0)kwMatch=Math.max(kwMatch,0.2);
       if((sk.description||'').toLowerCase().indexOf(ql)>=0)kwMatch=Math.max(kwMatch,0.2);
       if((sk.prompt_fragment||'').toLowerCase().indexOf(ql)>=0)kwMatch=Math.max(kwMatch,0.1);
+      var _shortQuery_skill=args.query.replace(/\s/g,'').length<8;
+      var _threshold_skill=_shortQuery_skill?0.03:0.08;
       var finalScore=sim>0?sim*0.85+kwMatch:kwMatch;
-      if(finalScore>=0.2)scored.push({skill:sk,id:sid,key:allIds[i],score:finalScore});
+      if(finalScore>=_threshold_skill)scored.push({skill:sk,id:sid,key:allIds[i],score:finalScore});
+    }
+    // Pass 2: 整句匹配结果不足时，拆词后每个词独立语义搜索
+    if(scored.length<limit){
+      var _skTerms=splitQueryTerms(args.query);
+      for(var _st=0;_st<_skTerms.length;_st++){
+        var _stEmb=null;
+        try{var _stResp=await sendToTaskWorker('embed',{text:_skTerms[_st]});if(_stResp&&_stResp.data&&_stResp.data.length===384)_stEmb=_stResp.data;}catch(e){}
+        if(!_stEmb)continue;
+        for(var _si=0;_si<allIds.length;_si++){
+          var _sk=skills[allIds[_si]];
+          var _skid=_sk.id||allIds[_si].replace('.json','');
+          var _ssim=_sk._embedding?cosineSimilarity(_stEmb,_sk._embedding):0;
+          if(!_sk._embedding){
+            try{var _seResp=await sendToTaskWorker('embed',{text:(_sk.name||'')+' '+(_sk.trigger||'')+' '+(_sk.category||'')+' '+(_sk.description||'')+' '+(_sk.prompt_fragment||'').substring(0,500)});if(_seResp&&_seResp.data&&_seResp.data.length===384){_sk._embedding=_seResp.data;_ssim=cosineSimilarity(_stEmb,_seResp.data);}}catch(e){}
+          }
+          if(_ssim<0.03)continue;
+          var _existing=false;
+          for(var _esi=0;_esi<scored.length;_esi++){if(scored[_esi].id===_skid){scored[_esi].score=Math.max(scored[_esi].score,_ssim);_existing=true;break;}}
+          if(!_existing)scored.push({skill:_sk,id:_skid,key:allIds[_si],score:_ssim});
+        }
+      }
     }
     scored.sort(function(a,b){return b.score-a.score;});
     var top=scored.slice(0,limit);
@@ -14978,7 +15268,7 @@ async function toolSkillManager(args){
       var dPreview=smartTruncate(desc,200);
       var pPreview=smartTruncate(pf,200);
       lines.push(
-        (j+1)+'. '+(isActive?'激活':'未激活')+' **'+(r.skill.name||'未命名')+'** (相关度:'+Math.round(r.score*100)+'%)'+
+        (j+1)+'. '+(isActive?'**已激活**':'**未激活**')+' **'+(r.skill.name||'未命名')+'** (相关度:'+Math.round(r.score*100)+'%)'+(isActive?'':' - 用 skill_manager set id=\"'+r.id+'\" 激活')+
         '\n   - ID: `'+r.id+'`'+
         '\n   - 触发词: '+(r.skill.trigger||'(无)')+
         '\n   - 分类: '+(r.skill.category||'未分类')+
@@ -15147,14 +15437,19 @@ window.deleteSkill=async function(skillId){
 async function refreshSkillCache(){
   try{
     var indexContent=await readFile('/skills/current_version.json');
-if(!indexContent){skillCache={skills:{},version:0,activeSkillIds:[]};return;}
+    if(!indexContent){skillCache={skills:{},version:0,activeSkillIds:[]};return;}
     var index=JSON.parse(indexContent);
     var skills={};
-    var activeSkills=index.active_skills||[];
-    for(var i=0;i<activeSkills.length;i++){
+    // 扫描 /skills/ 下所有 .json 文件，不限于 active_skills
+    var allSkillFiles=[];
+    try{allSkillFiles=await listDir('/skills/');}catch(e){}
+    var jsonFiles=allSkillFiles.filter(function(f){
+      return f.endsWith('.json') && f.indexOf('current_version')===-1 && f.indexOf('_usage_stats')===-1;
+    });
+    for(var i=0;i<jsonFiles.length;i++){
       try{
-        var content=await readFile('/skills/'+activeSkills[i]);
-        if(content)skills[activeSkills[i]]=JSON.parse(content);
+        var content=await readFile(jsonFiles[i]);
+        if(content)skills[jsonFiles[i]]=JSON.parse(content);
       }catch(e){}
     }
     // 尝试从当前对话恢复 activeSkillIds；若无则从索引文件迁移（向后兼容），否则空数组
@@ -15428,11 +15723,17 @@ function _buildFullSystemPrompt(userText){
 function matchesTrigger(triggerText,userText){
   var keywords=triggerText.split(/[,;\n]+/).filter(function(k){return k.trim().length>0;});
   var lowerUser=userText.toLowerCase();
+  var userTerms=splitQueryTerms(lowerUser);
   for(var i=0;i<keywords.length;i++){
     var kw=keywords[i].trim().toLowerCase();
-    // 改进：关键词长度>=3 或 完全匹配时才触发，减少误触发
     if(kw&&(kw.length>=3||lowerUser.split(/\s+/).indexOf(kw)>=0)){
+      // 直接子串匹配
       if(lowerUser.indexOf(kw)>=0)return true;
+      // 拆词重叠匹配：用户消息的拆分词与触发关键词的拆分词有重叠即触发
+      var kwTerms=splitQueryTerms(kw);
+      for(var t=0;t<kwTerms.length;t++){
+        if(userTerms.indexOf(kwTerms[t])>=0)return true;
+      }
     }
   }
   return false;
@@ -15533,7 +15834,7 @@ async function searchSimilarExperiences(query,limit){
       return {episode:ep,similarity:fused};
     });
     scored.sort(function(a,b){return b.similarity-a.similarity;});
-    var filtered=scored.filter(function(s){return s.similarity>=0.25;});
+    var filtered=scored.filter(function(s){return s.similarity>=0.08;});
 return filtered.slice(0,limit).map(function(s){return {text:s.episode.text,similarity:Math.round(s.similarity*100)/100,id:s.episode.id};});
   }catch(e){return [];}
 }
@@ -18540,7 +18841,14 @@ function toggleThinking() {
 function addToolResultBlock(msgDiv, toolName, resultContent, toolIndex) {
   var existingBlock = msgDiv.querySelector('#tool-result-' + msgDiv._msgId + '-' + toolIndex);
   if (existingBlock) {
-    existingBlock.textContent = resultContent;
+    // ★ 虚拟滚动兼容：大内容更新时保持虚拟渲染
+    if (existingBlock._virtualLines && resultContent.length > 5000) {
+      var _newLines = resultContent.split('\n');
+      existingBlock._virtualLines = _newLines;
+      _renderVirtualLines(existingBlock);
+    } else {
+      existingBlock.textContent = resultContent;
+    }
     return;
   }
   var toggleEl = document.createElement('div');
@@ -18550,7 +18858,14 @@ function addToolResultBlock(msgDiv, toolName, resultContent, toolIndex) {
   var resultBlock = document.createElement('div');
   resultBlock.className = 'tool-result-block collapsed';
   resultBlock.id = 'tool-result-' + msgDiv._msgId + '-' + toolIndex;
-  resultBlock.textContent = resultContent;
+  // ★ 大内容→虚拟滚动分线渲染（≥300行或≥5000字符触发）
+  var _isLarge = (resultContent.length > 5000) || (resultContent.split('\n').length > 300);
+  if (_isLarge) {
+    resultBlock._virtualLines = resultContent.split('\n');
+    resultBlock.innerHTML = '<div class="virtual-scroll-status" style="padding:4px 8px;font-size:11px;color:#888;border-bottom:1px solid #eee">虚拟滚动已启用 · 共 ' + resultBlock._virtualLines.length + ' 行</div><div class="virtual-scroll-viewport" style="position:relative;min-height:60px;overflow:hidden"></div>';
+  } else {
+    resultBlock.textContent = resultContent;
+  }
   // 插入到 contentDiv 之前（兄弟节点），保持 思考→工具→文本 的时序顺序
   var contentDiv = msgDiv.querySelector('.message-content');
   if (contentDiv) {
@@ -18561,6 +18876,69 @@ function addToolResultBlock(msgDiv, toolName, resultContent, toolIndex) {
     msgDiv.appendChild(resultBlock);
   }
 }
+/* ★ 虚拟滚动渲染函数：仅渲染可见区域附近的行 */
+function _renderVirtualLines(block) {
+  var lines = block._virtualLines;
+  if (!lines || !lines.length) return;
+  var viewport = block.querySelector('.virtual-scroll-viewport');
+  if (!viewport) { block.textContent = lines.join('\n'); return; }
+  var LINE_HEIGHT = 20, BUFFER = 40;
+  var scrollParent = block;
+  var scrollTop = scrollParent.scrollTop || 0;
+  var clientH = scrollParent.clientHeight || 300;
+  var totalH = lines.length * LINE_HEIGHT;
+  var start = Math.max(0, Math.floor(scrollTop / LINE_HEIGHT) - BUFFER);
+  var end = Math.min(lines.length, Math.ceil((scrollTop + clientH) / LINE_HEIGHT) + BUFFER);
+  // 用内容高度撑开滚动条（spacer方式）
+  var spacerTop = start * LINE_HEIGHT;
+  var spacerBottom = Math.max(0, (lines.length - end) * LINE_HEIGHT);
+  var frag = document.createDocumentFragment();
+  for (var i = start; i < end; i++) {
+    var lineDiv = document.createElement('div');
+    lineDiv.className = 'virtual-scroll-line';
+    lineDiv.textContent = lines[i];
+    lineDiv.dataset.line = i + 1;
+    frag.appendChild(lineDiv);
+  }
+  viewport.style.paddingTop = spacerTop + 'px';
+  viewport.style.paddingBottom = spacerBottom + 'px';
+  viewport.innerHTML = '';
+  viewport.appendChild(frag);
+  // 更新状态栏
+  var statusEl = block.querySelector('.virtual-scroll-status');
+  if (statusEl) {
+    var pct = totalH > 0 ? Math.round(scrollTop / totalH * 100) : 0;
+    statusEl.textContent = '虚拟滚动 · 共 ' + lines.length + ' 行 · 显示 ' + (end - start) + ' 行 · ' + pct + '%';
+  }
+}
+// ★ 全局滚动监听（RAF节流）：虚拟滚动容器滚动时重新渲染可见行
+var _virtualScrollRAF = {};
+document.addEventListener('scroll', function(e){
+  var block = e.target.closest('.tool-result-block');
+  if (!block || !block._virtualLines) return;
+  var bid = block.id || '_vs_';
+  if (_virtualScrollRAF[bid]) return;
+  _virtualScrollRAF[bid] = true;
+  requestAnimationFrame(function(){
+    _virtualScrollRAF[bid] = false;
+    _renderVirtualLines(block);
+  });
+}, {passive: true});
+// ★ 工具展开点击监听：折叠翻转由#messagesList的toggle handler先完成，此处直接渲染
+document.addEventListener('click', function(e){
+  var toggle = e.target.closest('.tool-result-toggle');
+  if (!toggle) return;
+  var targetId = toggle.getAttribute('data-target');
+  var block = document.getElementById(targetId);
+  if (!block || !block._virtualLines) return;
+  // 等一帧让浏览器完成布局（class已由冒泡到的#messagesList toggle handler翻转）
+  requestAnimationFrame(function(){
+    // 只有已展开（collapsed被移除）才渲染，折叠时无需操作
+    if (!block.classList.contains('collapsed')) {
+      _renderVirtualLines(block);
+    }
+  });
+});
 
 function toggleToolResult() {
   var block = document.getElementById(this.getAttribute('data-target'));
@@ -20672,6 +21050,12 @@ function initEventBindings(){
     if(e.target===this){this.style.display='none';_editTargetMsg=null;}
   });
 
+  // ★ 关闭/刷新前保存当前对话 + Token计数
+  window.addEventListener('beforeunload',function(){
+    saveCurrentMessages();
+    _saveTokenCounts();
+  });
+
   // ★ 滚动监听：显示/隐藏回底按钮 + 自动滚底开关
   var _userScrolledUp=false;
   var _scrollToBottomBtn=document.getElementById('scrollToBottomBtn');
@@ -20693,22 +21077,6 @@ function initEventBindings(){
       _scrollToBottomBtn.style.display='none';
     });
   }
-  // 初始加载后自动滚底
-  if(msgListDel){msgListDel.scrollTop=msgListDel.scrollHeight;}
-
-  // ★ Token计数器点击触发压缩
-  var tokenCounter=document.getElementById('tokenCounter');
-  if(tokenCounter){
-    tokenCounter.addEventListener('click',function(e){
-      e.stopPropagation();
-      _triggerManualCompression();
-    });
-  }
-  
-  // ★ 关闭/刷新前保存当前对话
-  window.addEventListener('beforeunload',function(){
-    saveCurrentMessages();
-  });
 
 // ================================================================
 // 第42部分：启动初始化
