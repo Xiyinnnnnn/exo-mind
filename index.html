@@ -9297,7 +9297,7 @@ function _buildLLMRequest(messages,tools,stream,source){
     for(var _mi2=0;_mi2<cleanedMessages.length;_mi2++){
        var _cl2=_estimateTokens(cleanedMessages[_mi2].content||'');
        if(_cl2>500000&&(cleanedMessages[_mi2].tool_call_id||cleanedMessages[_mi2].name)){
-        var _sentCount=cleanedMessages[_mi2]._sentCount||0;_sentCount++;
+         var _sentCount=cleanedMessages[_mi2]._sentCount||0;_sentCount++;
         cleanedMessages[_mi2]._sentCount=_sentCount;
         if(messages[_mi2])messages[_mi2]._sentCount=_sentCount;
         if(_sentCount<=3){
@@ -9368,19 +9368,34 @@ async function callLLM(messages,tools,stream,source){
   });
   if(!response.ok){
     var errText=await response.text();
+    // 400 maximum context length → API 偶发误报，重试一次
+    if(response.status===400&&errText.indexOf('maximum context length')>=0){
+      debugLogger.warn('callLLM 400 context length exceeded（疑似误报），重试...');
+      var req2=_buildLLMRequest(messages,tools,stream,source);
+      var response2=await fetch(req2.baseUrl+'/v1/chat/completions',{
+        method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+req2.apiKey},
+        body:JSON.stringify(req2.body)
+      });
+      if(response2.ok){
+        await budgetManager.recordCall(source);
+        if(stream)return response2;
+        var data2=await response2.json();
+        var _llmRsp2=(data2.choices&&data2.choices[0]&&data2.choices[0].message&&data2.choices[0].message.content)||'';
+        if(data2.choices&&data2.choices[0]&&data2.choices[0].message&&data2.choices[0].message.reasoning_content)_llmRsp2+=data2.choices[0].message.reasoning_content;
+        recordDailyTokenUsage(messages||[],_llmRsp2,data2.usage||null);
+        _tagMessageTokens(messages,data2.usage);
+        return data2;
+      }
+    }
     throw new Error('API请求失败 ('+response.status+'): '+errText);
   }
-  // 唯一递增点
   await budgetManager.recordCall(source);
   if(stream)return response;
   var data=await response.json();
-  // ★ 记录每日Token消耗（使用API精确usage）
-  var _llmRsp = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-  if(data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.reasoning_content){
-    _llmRsp += data.choices[0].message.reasoning_content;
-  }
-  recordDailyTokenUsage(messages || [], _llmRsp, data.usage||null);
-  _tagMessageTokens(messages, data.usage);
+  var _llmRsp=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||'';
+  if(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.reasoning_content)_llmRsp+=data.choices[0].message.reasoning_content;
+  recordDailyTokenUsage(messages||[],_llmRsp,data.usage||null);
+  _tagMessageTokens(messages,data.usage);
   return data;
 }
 
@@ -9451,6 +9466,11 @@ async function streamChatCompletion(messages,tools,onChunk,source){
       if(lastFetchError instanceof TypeError)continue;
       // 可恢复 HTTP 状态码 → 外层退避重试
       if(response&&(response.status===429||response.status===502||response.status===503||response.status===504))continue;
+      // 400 maximum context length → API 偶发误报，重试一次即可恢复
+      if(response&&response.status===400&&_httpErrText.indexOf('maximum context length')>=0){
+        debugLogger.warn('API 返回 400 context length exceeded（疑似误报），重试...');
+        continue;
+      }
       if(source==='user'&&evoWorker){evoWorker.postMessage({type:'task_failure',payload:{taskId:currentConversationId||'',errorType:response?'HTTP_'+response.status:'NetworkError',relevantSkills:skillCache.activeSkillIds||[],summary:(lastFetchError?lastFetchError.message:'API请求失败').substring(0,200)}});}
       throw lastFetchError||new Error('API请求失败');
     }
@@ -16501,7 +16521,7 @@ async function processUserMessage(userText,taskId){
 	    if(_nm)_toolName=_nm[1];
 	    var _cid='tc_migrated_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
 	    _genCalls.push({type:'function',id:_cid,function:{name:_toolName||'unknown',arguments:'{}'}});
-	    _genMsgs.push({role:'tool',tool_call_id:_cid,name:_toolName||'unknown',content:_tp});
+ 	    _genMsgs.push({role:'tool',tool_call_id:_cid,name:_toolName||'unknown',content:_tp,_sentCount:999});
 	  }
 	  if(_assistantText){
 	    var _asstMsg={role:'assistant',content:_assistantText};
@@ -16511,9 +16531,9 @@ async function processUserMessage(userText,taskId){
 	  for(var _tmi=0;_tmi<_genMsgs.length;_tmi++){messages.push(_genMsgs[_tmi]);}
 	
 	}else{
-	  var msg={role:role,content:content};
-	  if(item.tool_call_id)msg.tool_call_id=item.tool_call_id;
-	  if(item.name)msg.name=item.name;
+ 	  var msg={role:role,content:content};
+	  if(item.tool_call_id){msg.tool_call_id=item.tool_call_id;msg._sentCount=999;}
+	  if(item.name){msg.name=item.name;if(!item.tool_call_id)msg._sentCount=999;}
 	  messages.push(msg);
 	}
 
@@ -21645,8 +21665,9 @@ async function switchConversation(convId,forceSwitch){
       // ★ 旧格式自动迁移
       if(msgs&&msgs.items&&!msgs.branches){
         var legacyBid='b_'+Date.now();
+        var _oldItems=msgs.items;  // ★ 修复：保存原始 items 避免被 reassign 丢失
         msgs={branches:{}};
-        msgs.branches[legacyBid]={items:msgs.items,parentId:null,forkPoint:0,label:'分支 1'};
+        msgs.branches[legacyBid]={items:_oldItems,parentId:null,forkPoint:0,label:'分支 1'};
         msgs.currentBranchId=legacyBid;
         msgs.branchOrder=[legacyBid];
       }
