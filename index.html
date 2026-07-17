@@ -16930,7 +16930,7 @@ async function processUserMessage(userText,taskId){
 
 
       // ★ TODO 注入 — 累计token消耗>50K或dirty标记时注入当前进度
-      _updateTokenAccumulator(currentConversationId);
+      _convTokenAccumulator[currentConversationId]=messages.reduce(function(s,m){return s+(typeof m._tokens==='number'?m._tokens:0);},0); // 直接使用已标记 _tokens 的 messages，不依赖 _persistentMessages（防止工具调用后跳0）
       _updateToolbarTokenDisplay();
       _saveTokenCounts();
       var _todoCard=_buildTodoUserInjection(currentConversationId,'main');
