@@ -17815,6 +17815,22 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
     _updateTokenAccumulator(currentConversationId);
     _updateToolbarTokenDisplay();
     _saveTokenCounts();
+    // ★ 同步 _persistentMessages 到 branch data（异步持久化，配合 beforeunload 增加 IndexedDB 落地概率）
+    try{
+      var _bd2=_getBranchData(currentConversationId);
+      var _items2=window._persistentMessages&&window._persistentMessages[currentConversationId];
+      if(_bd2&&_bd2._branches&&_bd2._currentBranchId&&_items2&&_items2.length){
+        _bd2._branches[_bd2._currentBranchId].items=_items2.slice();
+        (async function(){
+          try{
+            var _db2=await getDB();
+            var _tx2=_db2.transaction('messages','readwrite');
+            _tx2.objectStore('messages').put({id:currentConversationId,branches:_bd2._branches,currentBranchId:_bd2._currentBranchId,branchOrder:_bd2._branchOrder,updatedAt:Date.now()});
+            await new Promise(function(res,rej){_tx2.oncomplete=res;_tx2.onerror=rej;});
+          }catch(_){}
+        })();
+      }
+    }catch(_){}
     updateSendButton();
     messagesDiv.scrollTop=messagesDiv.scrollHeight;
     if(processingError)debugLogger.warn('对话处理完成（有错误）');
@@ -21758,8 +21774,10 @@ async function switchConversation(convId,forceSwitch){
       if(branchItems&&branchItems.length){
         if(!window._persistentMessages)window._persistentMessages={};
         window._persistentMessages[convId]=branchItems.slice();
-        // 重建 token 累计值
-        _updateTokenAccumulator(convId);
+        // 重建 token 累计值（仅当 _loadTokenCounts 未加载时，避免覆盖 localStorage 恢复的正确值）
+        if(!_convTokenAccumulator[convId]){
+          _updateTokenAccumulator(convId);
+        }
       }
       // ★ 加载该对话的 API 调用用量日志
       if(typeof _loadApiUsageLog==='function'){
