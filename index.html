@@ -931,6 +931,10 @@ button,label,[role="button"],.file-upload-btn{
             <option value="技术参考">技术参考</option>
             <option value="项目文档">项目文档</option>
             <option value="个人笔记">个人笔记</option>
+            <option value="用户偏好">用户偏好</option>
+            <option value="项目设定">项目设定</option>
+            <option value="技术决策">技术决策</option>
+            <option value="对话总结">对话总结</option>
             <option value="其他">其他</option>
           </select>
           <div class="kb-form-actions">
@@ -1226,7 +1230,7 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'[MEMORY_LOOP] 回答前检索·回答后存储 — 每轮闭环，漏→不交付：\n'
 +'  前·· longterm_memory action="query" → 命中复用+标源 | 未中→标"无历史"\n'
 +'  前·· knowledge_base action="query" → 命中复用+标源 | 未中→标"无知识"\n'
-+'  后·· longterm_memory action="store" fact={text:"<需求+回答+决策>",category:"对话总结"}\n'
++'  后·· longterm_memory action="store" entry={text:"<需求+回答+决策>",category:"对话总结"}\n'
 +'  后·· knowledge_base action="store" entry={title:"<可复用点>",content:"<结构化>",category:"技术参考"}\n'
 +'  闲聊/简单问答→跳过··知识库写入。··记忆库写入不可跳过。\n\n'
 +'[THINK] 清单式解题协议\n'
@@ -1297,7 +1301,7 @@ var BASE_PROMPT='[ROLE] Exo 全栈智能体 | [LANG] zh-CN\n'
 +'  →filesystem read /d/weather-client/index.html →确认\n'
 +'（监工逐条验证→干活Agent修复→pipeline编排并行）\n'
 +'→pipeline run → 3/3通过\n'
-+'→longterm_memory store "天气Dashboard架构:Open-Meteo+express缓存+Chart.js多城对比" topic=weather-dashboard\n'
++'→longterm_memory store entry={text:"天气Dashboard架构:Open-Meteo+express缓存+Chart.js多城对比",category:"对话总结"}\n'
 +'\n'
 +'▸ P5 润色 — 通读全链路→修"温度单位"前后不一致(一处F一处C)→统一为C→验递进\n'
 +'[DELIVER] □代码已跑通 □备份已留 □文件已验证 □数据已核实 □问题已回答 □路径已告知\n'
@@ -1935,9 +1939,9 @@ function getCodeRunPermission(filePath){
 
 var TOOL_REGISTRY={
   'help':{name:'help',description:'工具管理。action:query/list/set/get/unset。扩展工具需help set载入后才可调用。',executor:'main_thread',
-    parameters:{type:'object',properties:{action:{type:'string',enum:['query','list','set','get','unset'],default:'list'},query:{type:'string',description:'语义搜索(action=query必填)'},limit:{type:'number',default:5,maximum:10},tool_name:{type:'string',description:'工具名(action=set/get/unset时必填)'},id:{type:'string',description:'工具名别名(同tool_name)'}},required:[]}},
+     parameters:{type:'object',properties:{action:{type:'string',enum:['query','list','set','get','unset'],default:'list'},query:{type:'string',description:'语义搜索(action=query必填)'},limit:{type:'number',default:5,maximum:10},id:{type:'string',description:'工具名(action=set/get/unset时必填)'}},required:[]}},
   'filesystem':{name:'filesystem',description:'文件系统。action:create/read/update/delete/list/tree/append/insert/delete_lines/replace_lines/rename/copy/move。行操作从大到小。代码执行用code_runner。',executor:'main_thread',
-    parameters:{type:'object',properties:{action:{type:'string',enum:['create','read','update','delete','list','tree','append','insert','delete_lines','replace_lines','rename','move','copy']},path:{type:'string',description:'路径。上传文件在/uploads/'},content:{type:'string',description:'内容。replace_lines/insert的content按\\\\n拆分'},line:{type:'number',description:'行号(1-based)'},endLine:{type:'number',description:'结束行(含),0=末尾'},maxLines:{type:'number',default:1000,maximum:1000},mode:{type:'string',enum:['auto','chunked','full'],default:'auto'},full_max_bytes:{type:'number',default:65536},new_name:{type:'string'},overwrite:{type:'boolean',default:false},safe:{type:'boolean',default:true},depth:{type:'number'}},required:['action','path']}},
+    parameters:{type:'object',properties:{action:{type:'string',enum:['create','read','update','delete','list','tree','append','insert','delete_lines','replace_lines','rename','move','copy']},path:{type:'string',description:'路径。上传文件在/uploads/'},content:{type:'string',description:'内容。replace_lines/insert的content按\\\\n拆分'},line:{type:'number',description:'行号(1-based)'},endLine:{type:'number',description:'结束行(含),0=末尾'},maxLines:{type:'number',default:1000,maximum:1000},mode:{type:'string',enum:['auto','chunked','full'],default:'auto'},full_max_bytes:{type:'number',default:65536},new_name:{type:'string',description:'新文件名(rename用)'},new_path:{type:'string',description:'目标路径(move/copy必填)'},overwrite:{type:'boolean',default:false},safe:{type:'boolean',default:true},depth:{type:'number'}},required:['action','path']}},
   'code_runner':{name:'code_runner',description:'代码执行器。仅支持.js/.py。传path(需先filesystem create)或传code+language。JS沙箱无npm,内置fs/path/os等+CDN(lodash/dayjs/marked/qs)。',executor:'main_thread',
     parameters:{type:'object',properties:{path:{type:'string',description:'代码文件路径(.js或.py)。主模式:与code二选一,优先path'},code:{type:'string',description:'代码片段字符串。次要模式:不传path时使用,需搭配language'},language:{type:'string',enum:['js','python'],description:'语言。传code时必填;传path时可省略(从扩展名自动推断)'},timeout:{type:'number',default:10000,description:'超时ms。JS默认10s,Python默认60s'},sandbox_dir:{type:'string',description:'沙箱工作目录,默认/sandbox/'}},required:[]}},
   'search':{name:'search',description:'网络搜索(Tavily)。返回标题/URL/摘要。可选include_raw_content抓原文。',executor:'task_worker',
@@ -1949,9 +1953,9 @@ var TOOL_REGISTRY={
   'semantic_memory':{name:'semantic_memory',description:'搜索历史对话(只读)。混合语义检索。',executor:'main_thread',
     parameters:{type:'object',properties:{query:{type:'string',description:'自然语言查询'},limit:{type:'number',default:3,maximum:10}},required:['query']}},
   'longterm_memory':{name:'longterm_memory',description:'AI私人笔记。action:query/store/list/get/delete/update/batch_delete。',executor:'main_thread',
-    parameters:{type:'object',properties:{action:{type:'string',enum:['query','store','list','get','delete','update','batch_delete']},query:{type:'string'},id:{type:'string'},ids:{type:'array',items:{type:'string'}},fact:{type:'object',properties:{text:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','用户偏好','项目设定','技术决策','对话总结','其他']}}},entries:{type:'array',items:{type:'object',properties:{text:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','用户偏好','项目设定','技术决策','对话总结','其他']}}}},limit:{type:'number',default:5,maximum:20}},required:['action']}},
+     parameters:{type:'object',properties:{action:{type:'string',enum:['query','store','list','get','delete','update','batch_delete']},query:{type:'string'},id:{type:'string'},ids:{type:'array',items:{type:'string'}},entry:{type:'object',properties:{text:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','用户偏好','项目设定','技术决策','对话总结','其他']}}},entries:{type:'array',items:{type:'object',properties:{text:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','用户偏好','项目设定','技术决策','对话总结','其他']}}}},limit:{type:'number',default:5,maximum:20}},required:['action']}},
   'knowledge_base':{name:'knowledge_base',description:'用户知识库(用户传你读)。action:query/list/get/store/update/delete。',executor:'main_thread',
-    parameters:{type:'object',properties:{action:{type:'string',enum:['query','list','get','store','update','delete','batch_delete'],default:'query'},query:{type:'string'},id:{type:'string'},entry:{type:'object',properties:{title:{type:'string'},content:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','其他']}}},entries:{type:'array',items:{type:'object',properties:{title:{type:'string'},content:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','其他']}}}},limit:{type:'number',default:3,maximum:10}},required:['action']}},
+    parameters:{type:'object',properties:{action:{type:'string',enum:['query','list','get','store','update','delete','batch_delete'],default:'query'},query:{type:'string'},id:{type:'string'},entry:{type:'object',properties:{title:{type:'string'},content:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','用户偏好','项目设定','技术决策','对话总结','其他']}}},entries:{type:'array',items:{type:'object',properties:{title:{type:'string'},content:{type:'string'},category:{type:'string',enum:['技术参考','项目文档','个人笔记','用户偏好','项目设定','技术决策','对话总结','其他']}}}},limit:{type:'number',default:3,maximum:10}},required:['action']}},
   'chart':{name:'chart',description:'ECharts图表。type:bar/line/area/pie/scatter/radar/funnel/gauge/heatmap/treemap/sankey。',executor:'main_thread',
     parameters:{type:'object',properties:{type:{type:'string',enum:['bar','line','area','pie','scatter','radar','funnel','gauge','heatmap','treemap','sankey']},title:{type:'string'},data:{type:'object'},options:{type:'object'}},required:['type','data']}},
   'diagram':{name:'diagram',description:'Mermaid图表。type:flowchart/sequence/state/class/gantt/pie。',executor:'main_thread',
@@ -2034,7 +2038,7 @@ var TOOL_PARAM_SCHEMA={
   'help':{},
   'skill_manager':{},
   'semantic_memory':{required:['query']},
-  'longterm_memory':{required:['action'],'store':{requiredOneOf:['fact','entries']}},
+   'longterm_memory':{required:['action'],'store':{requiredOneOf:['entry','entries']}},
   'knowledge_base':{required:['action'],'store':{requiredOneOf:['entry','entries']}},
   'mcts_plan':{required:['problem','goal']},
   'pipeline':{},
@@ -2404,8 +2408,8 @@ pi(π)  e  i(虚数)
 | list | 列出全部(ID+分类+摘要) | 无 |
 | get | 获取完整内容(无截断) | id |
 | query | 语义搜索(混合检索) | query, limit(默认5) |
-| store | 写入(单条/批量) | fact:{text,category} 或 entries:[{text,category}] |
-| update | 修改条目 | id, fact:{text,category} |
+| store | 写入(单条/批量) | entry:{text,category} 或 entries:[{text,category}] |
+| update | 修改条目 | id, entry:{text,category} |
 | delete | 删除单条 | id |
 | batch_delete | 批量删除 | ids:[id1,id2,...] |
 
@@ -2414,11 +2418,11 @@ pi(π)  e  i(虚数)
 
 ### 最小示例
 `+"`"+`longterm_memory action="list"`+"`"+`
-`+"`"+`longterm_memory action="store" fact={text:"用户偏好React+TypeScript技术栈",category:"用户偏好"}`+"`"+`
+`+"`"+`longterm_memory action="store" entry={text:"用户偏好React+TypeScript技术栈",category:"用户偏好"}`+"`"+`
 `+"`"+`longterm_memory action="store" entries=[{text:"项目A用PostgreSQL",category:"项目设定"},{text:"性能优化v3.1",category:"技术决策"}]`+"`"+`
 `+"`"+`longterm_memory action="query" query="React" limit=5`+"`"+`
 `+"`"+`longterm_memory action="get" id="mem_xxx"`+"`"+`
-`+"`"+`longterm_memory action="update" id="mem_xxx" fact={text:"更新内容",category:"技术决策"}`+"`"+`
+`+"`"+`longterm_memory action="update" id="mem_xxx" entry={text:"更新内容",category:"技术决策"}`+"`"+`
 `+"`"+`longterm_memory action="delete" id="mem_xxx"`+"`"+`
 ### 注意事项
 - 无数量限制，自由存储
@@ -2442,7 +2446,7 @@ pi(π)  e  i(虚数)
 - **file:xxx()**: 文件导入,只读
 
 ### category 枚举
-技术参考 / 项目文档 / 个人笔记 / 其他
+技术参考 / 项目文档 / 个人笔记 / 用户偏好 / 项目设定 / 技术决策 / 对话总结 / 其他
 
 ### 最小示例
 `+"`"+`knowledge_base action="list"`+"`"+`
@@ -3761,7 +3765,14 @@ var ERROR_CODES={
   WORKER_TIMEOUT:{code:'WORKER_TIMEOUT',level:'ERROR',retry:true,maxRetries:3},
   INVALID_STATE:{code:'INVALID_STATE',level:'ERROR',retry:false},
   SKILL_CONFLICT:{code:'SKILL_CONFLICT',level:'WARN',retry:false},
-  EVAL_FAILED:{code:'EVAL_FAILED',level:'INFO',retry:false,message:'技能评估未通过，补丁已丢弃'}
+  EVAL_FAILED:{code:'EVAL_FAILED',level:'INFO',retry:false,message:'技能评估未通过，补丁已丢弃'},
+  ERR_TOOL_PARAM_INVALID:{code:'ERR_TOOL_PARAM_INVALID',level:'ERROR',retry:false,message:'工具参数校验失败：请检查必填参数是否完整'},
+  ERR_ENTRY_NOT_FOUND:{code:'ERR_ENTRY_NOT_FOUND',level:'ERROR',retry:false,message:'记忆/知识条目未找到：请检查ID是否正确'},
+  ERR_BATCH_ENTRY_EMPTY:{code:'ERR_BATCH_ENTRY_EMPTY',level:'ERROR',retry:false,message:'批量存储条目为空：请提供至少一条entry'},
+  ERR_CATEGORY_INVALID:{code:'ERR_CATEGORY_INVALID',level:'ERROR',retry:false,message:'分类无效：请使用允许的分类值'},
+  ERR_PATH_NOT_FOUND:{code:'ERR_PATH_NOT_FOUND',level:'ERROR',retry:false,message:'文件路径不存在：请检查路径是否正确'},
+  ERR_PATH_EXISTS:{code:'ERR_PATH_EXISTS',level:'ERROR',retry:false,message:'文件路径已存在：使用overwrite=true覆盖或更换路径'},
+  ERR_TOOL_EXEC:{code:'ERR_TOOL_EXEC',level:'ERROR',retry:true,maxRetries:2,message:'工具执行异常：请检查参数和状态后重试'}
 };
 
 // ================================================================
@@ -11969,8 +11980,8 @@ async function toolHelp(args){
   }
 
   if(action==='set'){
-    var setId=(args.tool_name||args.id||'').trim();
-    if(!setId)return '[ERR_CODE] MISSING_PARAM\n[PARAM] id/tool_name\n[MESSAGE] 请指定工具ID\n[SUGGEST] 使用 help action="query" query="关键词" 搜索或 help list 查看全部';
+    var setId=(args.id||'').trim();
+    if(!setId)return '[ERR_CODE] MISSING_PARAM\n[PARAM] id\n[MESSAGE] 请指定工具ID\n[SUGGEST] 使用 help action="query" query="关键词" 搜索或 help list 查看全部';
     var tDef=TOOL_REGISTRY[setId];
     if(!tDef)return '[ERR_CODE] NOT_FOUND\n[PARAM] id\n[VALUE] '+setId+'\n[MESSAGE] 未找到工具\n[SUGGEST] 使用 help action="query" query="关键词" 搜索或 help list 查看完整列表';
     if(tDef.disabled)return ' 工具 `'+setId+'` 已被禁用。';
@@ -11981,17 +11992,17 @@ async function toolHelp(args){
   }
 
   if(action==='unset'){
-    var unsetId=(args.tool_name||args.id||'').trim();
-    if(!unsetId)return '[ERR_CODE] MISSING_PARAM\n[PARAM] tool_name/id\n[MESSAGE] 请指定要卸载的工具 ID\n[SUGGEST] 使用 help list 查看已载入的工具';
-    if(CORE_TOOL_NAMES.indexOf(unsetId)>=0)return '[ERR_CODE] INVALID_PARAM\n[PARAM] tool_name\n[VALUE] '+unsetId+'\n[MESSAGE] 核心工具不可卸载\n[SUGGEST] 核心工具始终可用，无需卸载';
-    if(TOOL_REGISTRY[unsetId]&&TOOL_REGISTRY[unsetId].flow_role==='supervisor')return '[ERR_CODE] INVALID_PARAM\n[PARAM] tool_name\n[VALUE] '+unsetId+'\n[MESSAGE] 监工专属工具不可卸载\n[SUGGEST] 监工工具由系统管理';
+    var unsetId=(args.id||'').trim();
+    if(!unsetId)return '[ERR_CODE] MISSING_PARAM\n[PARAM] id\n[MESSAGE] 请指定要卸载的工具 ID\n[SUGGEST] 使用 help list 查看已载入的工具';
+    if(CORE_TOOL_NAMES.indexOf(unsetId)>=0)return '[ERR_CODE] INVALID_PARAM\n[PARAM] id\n[VALUE] '+unsetId+'\n[MESSAGE] 核心工具不可卸载\n[SUGGEST] 核心工具始终可用，无需卸载';
+    if(TOOL_REGISTRY[unsetId]&&TOOL_REGISTRY[unsetId].flow_role==='supervisor')return '[ERR_CODE] INVALID_PARAM\n[PARAM] id\n[VALUE] '+unsetId+'\n[MESSAGE] 监工专属工具不可卸载\n[SUGGEST] 监工工具由系统管理';
     _unloadTool(convId,unsetId);
     return ' 工具已卸载: `'+unsetId+'`。下次调用前需 `help set` 重新载入。';
   }
 
   // get / 默认
-  var tn=args.tool_name||args.id||action;
-  if(!tn||tn==='get')return '[ERR_CODE] MISSING_PARAM\n[PARAM] tool_name/id\n[MESSAGE] 请指定 tool_name\n[SUGGEST] 使用 help list 查看所有工具';
+  var tn=args.id||action;
+  if(!tn||tn==='get')return '[ERR_CODE] MISSING_PARAM\n[PARAM] id\n[MESSAGE] 请指定 id\n[SUGGEST] 使用 help list 查看所有工具';
   if(tn==='grade_guide'){
     if(flowSession()&&flowSession().active)return _WORKER_GRADE;
     return _SHARED_GRADE;
@@ -12000,7 +12011,7 @@ async function toolHelp(args){
   if(doc)return doc;
   var t2=TOOL_REGISTRY[tn];
   if(t2)return '## '+tn+'\n'+t2.description+'\n\n(该工具暂无扩展文档，以上为基本信息。)';
-  return '[ERR_CODE] NOT_FOUND\n[PARAM] tool_name\n[VALUE] '+tn+'\n[MESSAGE] 未找到工具\n[SUGGEST] 使用 help action="query" query="关键词" 搜索或 help list 查看所有可用工具';
+  return '[ERR_CODE] NOT_FOUND\n[PARAM] id\n[VALUE] '+tn+'\n[MESSAGE] 未找到工具\n[SUGGEST] 使用 help action="query" query="关键词" 搜索或 help list 查看所有可用工具';
 }
 
 async function toolLongtermMemory(args){
@@ -12017,7 +12028,7 @@ async function toolLongtermMemory(args){
 
   // ── list：列出全部条目（ID+分类+内容摘要，不含完整内容） ──
   if(args.action==='list'){
-    if(!facts.length)return '[ERR_CODE] MEM_EMPTY\n[MESSAGE] 记忆库为空\n[SUGGEST] 使用 longterm_memory action="store" fact={text:"内容"} 写入第一条';
+     if(!facts.length)return '[ERR_CODE] MEM_EMPTY\n[MESSAGE] 记忆库为空\n[SUGGEST] 使用 longterm_memory action="store" entry={text:"内容"} 写入第一条';
     facts.sort(function(a,b){return(b.ts||0)-(a.ts||0);});
     var lines=[];
     for(var i=0;i<facts.length;i++){
@@ -12098,8 +12109,8 @@ async function toolLongtermMemory(args){
 
   // ── store：写入记忆（支持单条或批量） ──
   if(args.action==='store'){
-    var entries=args.entries||(args.fact?[args.fact]:null);
-    if(!entries||!entries.length)return '[ERR_CODE] MISSING_PARAM\n[PARAM] fact/entries\n[MESSAGE] 请指定 fact(单条) 或 entries(批量)\n[SUGGEST] 补充 fact={text:"内容"} 或 entries=[{text:"内容"}]';
+     var entries=args.entries||(args.entry?[args.entry]:null)||(args.fact?[args.fact]:null);
+     if(!entries||!entries.length)return '[ERR_CODE] MISSING_PARAM\n[PARAM] entry/entries\n[MESSAGE] 请指定 entry(单条) 或 entries(批量)\n[SUGGEST] 补充 entry={text:"内容"} 或 entries=[{text:"内容"}]';
     var results=[], errors=[];
     for(var ei=0;ei<entries.length;ei++){
       var fi=entries[ei];
@@ -12120,7 +12131,7 @@ async function toolLongtermMemory(args){
     if(results.length)out+=': ID '+results.join(', ');
     if(results.length===1)out=' 已存入记忆 [ID:'+results[0]+']';
     if(errors.length)out+='\n跳过 '+errors.length+' 条:\n'+errors.join('\n');
-    if(!results.length&&errors.length)out='[ERR_CODE] INVALID_PARAM\n[PARAM] entries\n[MESSAGE] 全部 '+entries.length+' 条均缺少 text 字段，无任何记忆被创建\n[SUGGEST] 检查 fact 结构: {text:"xxx"}';
+    if(!results.length&&errors.length)out='[ERR_CODE] INVALID_PARAM\n[PARAM] entries\n[MESSAGE] 全部 '+entries.length+' 条均缺少 text 字段，无任何记忆被创建\n[SUGGEST] 检查 entry 结构: {text:"xxx"}';
     return out;
   }
 
@@ -12153,16 +12164,16 @@ async function toolLongtermMemory(args){
   // ── update：按ID修改 ──
   if(args.action==='update'){
     if(!args.id)return '[ERR_CODE] MISSING_PARAM\n[PARAM] id\n[MESSAGE] 请指定 id\n[SUGGEST] 使用 longterm_memory list 查看全部条目';
-    if(!args.fact||!args.fact.text)return '[ERR_CODE] MISSING_PARAM\n[PARAM] fact.text\n[MESSAGE] 请指定 fact.text\n[SUGGEST] 补充 fact={text:"新内容"}';
+     if(!args.entry||!args.entry.text)return '[ERR_CODE] MISSING_PARAM\n[PARAM] entry.text\n[MESSAGE] 请指定 entry.text\n[SUGGEST] 补充 entry={text:"新内容"}';
     for(var i=facts.length-1;i>=0;i--){
       if(facts[i].id===args.id){
         var old=facts[i];
         var newEmbedding=null;
         try{
-          var embResp3=await sendToTaskWorker('embed',{text:args.fact.text.substring(0,500)});
+           var embResp3=await sendToTaskWorker('embed',{text:args.entry.text.substring(0,500)});
           if(embResp3&&embResp3.data&&Array.isArray(embResp3.data)&&embResp3.data.length===384)newEmbedding=embResp3.data;
         }catch(e){}
-        facts[i]={id:args.id,text:args.fact.text,category:args.fact.category||old.category||'其他',embedding:newEmbedding||old.embedding||null,ts:Date.now()};
+         facts[i]={id:args.id,text:args.entry.text,category:args.entry.category||old.category||'其他',embedding:newEmbedding||old.embedding||null,ts:Date.now()};
         await _saveLongTermMemory();
         return '已更新记忆 [ID:'+args.id+'] ['+facts[i].category+']: '+facts[i].text.substring(0,80)+'\n(旧内容: '+old.text.substring(0,60)+')';
       }
@@ -13821,7 +13832,7 @@ async function _subAgentLLM(systemPrompt,userPrompt,toolsWhitelist,temperature,t
       _subToolLines.push('- **'+_st.name+'**: '+_st.description);
     }
     var _hasHelp=toolsWhitelist.indexOf('help')>=0;
-    systemPrompt+='\n\n## 可用工具\n'+_subToolLines.join('\n')+(_hasHelp?'\n\n>  调用 `help action="get" tool_name="xxx"` 获取任意工具的完整文档及最小示例。':'');
+    systemPrompt+='\n\n## 可用工具\n'+_subToolLines.join('\n')+(_hasHelp?'\n\n>  调用 `help id="xxx"` 获取任意工具的完整文档及最小示例。':'');
   }
   msgs[0].content=systemPrompt;
 
@@ -15849,13 +15860,15 @@ async function showSkillEvolutionLog(skillId){
 
 // ===== 技能可视化管理：编辑/删除/下载 =====
 function editSkill(filename){
-  var s=skillCache.skills[filename];
+  // ★【BUGFIX】兼容带/不带 /skills/ 前缀的 filename，_editFilename 存纯文件名
+  var cleanName=filename.replace(/^\/skills\//,'');
+  var s=skillCache.skills[filename]||skillCache.skills['/skills/'+filename]||skillCache.skills[cleanName];
   if(!s){showToast('技能不存在','error');return;}
   document.getElementById('skillEditName').value=s.name||'';
   document.getElementById('skillEditTrigger').value=s.trigger||'';
   document.getElementById('skillEditPrompt').value=s.prompt_fragment||'';
   document.getElementById('skillEditCategory').value=s.category||'工具增强';
-  skillEditForm._editFilename=filename;
+  skillEditForm._editFilename=cleanName;
   document.getElementById('btnSkillEditSave').textContent='更新';
   skillEditForm.style.display='flex';
   skillEditForm.scrollIntoView({behavior:'smooth',block:'center'});
@@ -15895,7 +15908,8 @@ if(btnSkillEditSave)btnSkillEditSave.addEventListener('click',async function(){
   
   if(filename){
     // 编辑已有技能
-    var s=skillCache.skills[filename];
+    // ★【BUGFIX】兼容 _editFilename 为纯文件名，skillCache.skills 的 key 可能带 /skills/ 前缀
+    var s=skillCache.skills[filename]||skillCache.skills['/skills/'+filename];
     if(!s){showToast('技能不存在','error');return;}
     s.name=name;s.trigger=trigger;s.prompt_fragment=prompt;
     s.category=category;
