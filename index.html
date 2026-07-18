@@ -3900,17 +3900,17 @@ async function _deleteTodos(convId){
 }
 
 var _convTokenAccumulator={};
-function _updateTokenAccumulator(convId, tokens){
+function _updateTokenAccumulator(convId, tokens, msgs){
   convId=convId||currentConversationId;
-  if(arguments.length===1||tokens===null||tokens===undefined){
-    // ★ 从当前对话的消息数组累加每条消息的 _tokens（API精确值）
+  if(arguments.length<=2||tokens===null||tokens===undefined){
+    // ★ 从传入的消息数组累加每条消息的 _tokens（API精确值）
     //   无 _tokens 的消息贡献 0（等下次 API 返回后被标记）
-    var msgs=window._persistentMessages&&window._persistentMessages[convId];
-    if(!msgs||!msgs.length){_convTokenAccumulator[convId]=0;return;}
     var total=0;
-    for(var i=0;i<msgs.length;i++){
-      if(typeof msgs[i]._tokens==='number')total+=msgs[i]._tokens;
-      // ★ 无精确 _tokens 时不估算，等 _tagMessageTokens 标记
+    if(msgs&&msgs.length){
+      for(var i=0;i<msgs.length;i++){
+        if(typeof msgs[i]._tokens==='number')total+=msgs[i]._tokens;
+        // ★ 无精确 _tokens 时不估算，等 _tagMessageTokens 标记
+      }
     }
     _convTokenAccumulator[convId]=total;
   }else{
@@ -4042,12 +4042,9 @@ async function _triggerManualCompression(){
   if(!convId)return;
   var cs=_ensureConvState(convId);
   if(cs&&cs.isProcessing){showToast('正在处理中，无法压缩','warning');return;}
-  var msgs=window._persistentMessages&&window._persistentMessages[convId];
-  if(!msgs){
-    var _bd=_getBranchData(convId);
-    var _br=_bd._branches[_bd._currentBranchId];
-    if(_br&&_br.items)msgs=_br.items;
-  }
+  var _bd=_getBranchData(convId);
+  var _br=_bd._branches[_bd._currentBranchId];
+  var msgs=_br&&_br.items;
   if(!msgs||msgs.length<3){showToast('对话太短(<3条)，无需压缩','info');return;}
   _compressingLock=true;
   var container=document.getElementById('toastContainer');
@@ -4060,25 +4057,22 @@ async function _triggerManualCompression(){
     toast.textContent='正在压缩上下文'+'.'.repeat(dots);
   },500);
   try{
-    var compressed=await _compressOldMessages(msgs,0);
-    clearInterval(dotTimer);
-    if(compressed){
-      if(!window._persistentMessages)window._persistentMessages={};
-      window._persistentMessages[convId]=msgs;
-      var _archiveMsg=compressed[compressed.length-1];
-      if(_archiveMsg&&_archiveMsg._injected){
-        for(var _ai=0;_ai<msgs.length;_ai++){
-          if(msgs[_ai]._injected&&msgs[_ai].content&&msgs[_ai].content.indexOf('[系统归档]')>=0){
-            msgs.splice(_ai,1);break;
-          }
-        }
-        msgs.push(_archiveMsg);
-      }
-      _updateTokenAccumulator(convId);
-      _updateToolbarTokenDisplay();
-      _saveTokenCounts();
-      toast.className='toast success';
-      toast.textContent='上下文已成功压缩 → 标记 '+msgs.length+' 条消息（含 '+(msgs.length-compressed.length+1)+' 条旧消息已过期）';
+     var compressed=await _compressOldMessages(msgs,0);
+     clearInterval(dotTimer);
+     if(compressed){
+       // ★ 物理丢弃旧消息，对齐自动压缩模式 (见 _autoCompressThreshold)
+       var _origLen=msgs.length;
+       var _newMsgs=[msgs[0]];      // 保留 system prompt
+       for(var _mi=0;_mi<compressed.length;_mi++){
+         _newMsgs.push(compressed[_mi]);
+       }
+       msgs.length=0;
+       Array.prototype.push.apply(msgs,_newMsgs);
+       _updateTokenAccumulator(convId, null, msgs);
+       _updateToolbarTokenDisplay();
+       _saveTokenCounts();
+       toast.className='toast success';
+       toast.textContent='上下文已成功压缩 → '+compressed.length+' 条活跃消息（清除 '+(_origLen-compressed.length)+' 条旧消息）';
     }else{
       toast.className='toast info';
       toast.textContent='当前上下文无需压缩';
@@ -4210,7 +4204,7 @@ async function _compressOldMessages(messages,modelMaxTokens){
   for(var i=0;i<messages.length;i++){
     var m=messages[i];
     var _charEst=_estimateTokens((m.content||'')+(m.reasoning_content||''));
-    var est=(m._tokens||_charEst);
+    var est=(m._tokens!==undefined&&m._tokens!==null?m._tokens:_charEst);
     perMsg.push(est);
     totalEst+=est;
   }
@@ -4317,7 +4311,7 @@ async function _compressOldMessages(messages,modelMaxTokens){
       if(toKeep[k].tool_call_id)_clean.tool_call_id=toKeep[k].tool_call_id;
       if(toKeep[k].name)_clean.name=toKeep[k].name;
       if(toKeep[k].tool_calls)_clean.tool_calls=toKeep[k].tool_calls;
-      if(toKeep[k]._tokens)_clean._tokens=toKeep[k]._tokens;
+      if(toKeep[k]._tokens!==undefined)_clean._tokens=toKeep[k]._tokens;
       if(toKeep[k]._sentCount)_clean._sentCount=toKeep[k]._sentCount;
       compressed.push(_clean);
     }
@@ -4330,13 +4324,13 @@ async function _compressOldMessages(messages,modelMaxTokens){
     // ★ 极端回退：摘要+保留仍超限 → 丢弃最旧消息直到安全
     var _compEst=_estimateTokens(summary);
     for(var k2=0;k2<toKeep.length;k2++){
-      _compEst+=(toKeep[k2]._tokens||_estimateTokens(toKeep[k2].content||''));
+      _compEst+=(toKeep[k2]._tokens!==undefined&&toKeep[k2]._tokens!==null ? toKeep[k2]._tokens : _estimateTokens(toKeep[k2].content||''));
     }
     if(_compEst>limit){
       var _dropCount=0;
       while(_compEst>limit&&compressed.length>2){
         var _dropped=compressed.splice(1,1)[0];
-        _compEst-=(_dropped._tokens||_estimateTokens(_dropped.content||''));
+        _compEst-=(_dropped._tokens!==undefined&&_dropped._tokens!==null ? _dropped._tokens : _estimateTokens(_dropped.content||''));
         _dropCount++;
       }
       if(_dropCount>0)debugLogger.warn(' 极端回退: 压缩后仍超限，丢弃最旧'+_dropCount+'条 | est:'+_compEst+'/'+limit);
@@ -4351,10 +4345,8 @@ async function _compressOldMessages(messages,modelMaxTokens){
       }
     }
 
-    // ★ 被压缩的旧消息标记 token=0，不删消息只标记过期
-    for(var _zti=0;_zti<messages.length-keepCount;_zti++){
-      if(messages[_zti]&&!messages[_zti]._injected)messages[_zti]._tokens=0;
-    }
+    // ★ 压缩结果校验：丢弃压缩中可能产生的不完整 tool_calls 对
+    compressed=_validateMessageSequence(compressed);
     debugLogger.info(' 智能压缩: '+messages.length+'条→'+compressed.length+'条 | est:'+totalEst+'→~'+_compEst+' | 触发:'+limit+' | 保留'+keepCount+'条');
     compressed._estTokens = _compEst;
     return compressed;
@@ -9262,8 +9254,8 @@ function _buildLLMRequest(messages,tools,stream,source){
     
     // 【修复】清理messages — 使用模块级 _safeMessageStr（三条LLM路径统一复用）
     var _safeStr = _safeMessageStr;
-    // ★ 跳过 _tokens===0 的过期消息（压缩标记），不发送到 API，但仍保留在 messages 中用于持久化
-    var cleanedMessages=messages.filter(function(m){return m._tokens!==0;}).map(function(m){
+    // ★ 压缩过的旧消息已被《compressOldMessages》物理丢弃，无需再按 _tokens 过滤
+    var cleanedMessages=messages.map(function(m){
         var cleaned={role:m.role};
         if(m.content!==undefined&&m.content!==null)cleaned.content=_safeStr(m.content);
         else if(m.tool_calls)cleaned.content=null;
@@ -9280,7 +9272,8 @@ function _buildLLMRequest(messages,tools,stream,source){
         if(m._sentCount)cleaned._sentCount=m._sentCount;
         return cleaned;
     });
-    
+    // ★ 消息序列校验：丢弃损坏的上下文（孤立tool、不完整tool_calls对），_tokens===0为向后兼容
+    cleanedMessages=_validateMessageSequence(cleanedMessages);
     // ★ 多层兜底：精炼工具结果 → 仍超限则丢弃最旧消息（不含system[0]）
     var _MODEL_MAX=1048565;
     var _desiredMax=settings.max_tokens||384000;
@@ -9290,8 +9283,8 @@ function _buildLLMRequest(messages,tools,stream,source){
       var _tok=cleanedMessages[_mi]._tokens;
       var _charEst=_estimateTokens((cleanedMessages[_mi].content||'')+(cleanedMessages[_mi].reasoning_content||''));
       // ★ 容错：_tokens 严重偏离字符估算(>3倍)时，用字符估算兜底
-      if(_tok&&_charEst&&_tok>_charEst*3)_tok=_charEst;
-      _estMsgTotal+=(_tok||_charEst);
+      if(_tok!==undefined&&_tok!==null&&_charEst&&_tok>_charEst*3)_tok=_charEst;
+      _estMsgTotal+=(_tok!==undefined&&_tok!==null ? _tok : _charEst);
     }
     // ★ 跨轮精炼：N-3轮保留原始内容，N-3轮之前的旧结果降级为引导语句
     for(var _mi2=0;_mi2<cleanedMessages.length;_mi2++){
@@ -9329,15 +9322,7 @@ function _buildLLMRequest(messages,tools,stream,source){
     _estMsgTotal=0;
     for(var _mii=0;_mii<cleanedMessages.length;_mii++){_estMsgTotal+=(cleanedMessages[_mii]._tokens||_estimateTokens(cleanedMessages[_mii].content||''));}
     // ★ 极端丢弃已移除：跨轮精炼已压缩大块工具结果，剩余超限由 API 自行截断
-    for(var _ocj=cleanedMessages.length-1;_ocj>=1;_ocj--){
-      if(cleanedMessages[_ocj].role==='tool'){
-        var _ocaller2=false;
-        for(var _otq=_ocj-1;_otq>=0;_otq--){
-          if(cleanedMessages[_otq].role==='assistant'&&cleanedMessages[_otq].tool_calls){_ocaller2=true;break;}
-        }
-        if(!_ocaller2)cleanedMessages.splice(_ocj,1);
-      }
-    }
+    // ★ 孤立tool清理已由 _validateMessageSequence 统一处理（见第9284行）
     // 【修复】有工具调用时自动翻倍；384K兜底，杜绝多轮工具调用中token耗尽被截断
     var effectiveMaxTokens=settings.max_tokens||384000;
     if(tools&&tools.length>0)effectiveMaxTokens=Math.max(effectiveMaxTokens,16384);
@@ -9354,8 +9339,73 @@ function _buildLLMRequest(messages,tools,stream,source){
         body.thinking={type:'enabled'};
         body.reasoning_effort=settings.reasoning_effort||'max';
     }
+    // ★ Debug dump: 保存请求体到全局变量
+    if(typeof window!=='undefined'){
+      window.__lastReqBody=body;window.__lastReqBodyStr=JSON.stringify(body);
+      try{require('fs').writeFileSync(process.cwd()+'/request_body_last.json',JSON.stringify({time:Date.now(),messages:body.messages.map(function(m){return {role:m.role,tokens:m._tokens,contentLen:(m.content||'').length};})}));}catch(_){}
+    }
     return {baseUrl:baseUrl,apiKey:apiKey,body:body};
 }
+
+// ★ 消息序列合法性校验：丢弃损坏的压缩上下文
+// ★ 消息序列合法性校验：丢弃损坏的上下文
+//   tool_calls 必须后跟对应 tool 消息，孤立 tool 或无 tool 回应的 tool_calls 均丢弃
+//   _tokens===0 向后兼容：旧数据中标记过期的消息一并清除
+function _validateMessageSequence(messages){
+  if(!messages||messages.length===0)return messages;
+  var cleaned=messages.slice();
+  // Pass 1: [向后兼容] 移除旧数据中 _tokens===0 的过期消息
+  cleaned=cleaned.filter(function(m){return m._tokens!==0;});
+  // Pass 2: 从后往前扫描，丢弃孤立 tool 消息（无对应 assistant.tool_calls）
+  var pi=cleaned.length-1;
+  while(pi>=0){
+    if(cleaned[pi].role==='tool'){
+      var _foundCaller=false;
+      for(var pj=pi-1;pj>=0;pj--){
+        if(cleaned[pj].role==='assistant'&&cleaned[pj].tool_calls){
+          for(var pk=0;pk<cleaned[pj].tool_calls.length;pk++){
+            if(cleaned[pj].tool_calls[pk].id===cleaned[pi].tool_call_id){
+              _foundCaller=true;break;
+            }
+          }
+          if(_foundCaller)break;
+        }
+      }
+      if(!_foundCaller){
+        debugLogger.warn(' [校验] 丢弃孤立tool消息 call_id='+cleaned[pi].tool_call_id);
+        cleaned.splice(pi,1);
+      }
+    }
+    pi--;
+  }
+  // Pass 3: 从前往后扫描，丢弃 tool_calls 不完整的 assistant 及附带 tool 消息
+  for(var ni=0;ni<cleaned.length;ni++){
+    if(cleaned[ni].role==='assistant'&&cleaned[ni].tool_calls&&cleaned[ni].tool_calls.length>0){
+      var _tcMap={};
+      for(var nk=0;nk<cleaned[ni].tool_calls.length;nk++){
+        _tcMap[cleaned[ni].tool_calls[nk].id]=false;
+      }
+      var _matchedCount=0;
+      for(var nj=ni+1;nj<cleaned.length;nj++){
+        if(cleaned[nj].role==='tool'&&_tcMap[cleaned[nj].tool_call_id]!==undefined){
+          if(!_tcMap[cleaned[nj].tool_call_id]){_tcMap[cleaned[nj].tool_call_id]=true;_matchedCount++;}
+        }else if(cleaned[nj].role!=='tool'){
+          break;
+        }
+      }
+      if(_matchedCount<Object.keys(_tcMap).length){
+        var _delEnd=ni+1;
+        while(_delEnd<cleaned.length&&cleaned[_delEnd].role==='tool')_delEnd++;
+        debugLogger.warn(' [校验] tool_calls不完整('+_matchedCount+'/'+Object.keys(_tcMap).length+')，丢弃assistant#'+ni+'及'+(_delEnd-ni-1)+'条tool消息');
+        cleaned.splice(ni,_delEnd-ni);
+        ni--; // 重新检查当前位置
+      }
+    }
+  }
+  return cleaned;
+}
+
+
 
 
 // 非流式LLM调用 — API成功后单一递增
@@ -16532,23 +16582,25 @@ async function processUserMessage(userText,taskId){
 	
 	}else{
  	  var msg={role:role,content:content};
-	  if(item.tool_call_id){msg.tool_call_id=item.tool_call_id;msg._sentCount=999;}
-	  if(item.name){msg.name=item.name;if(!item.tool_call_id)msg._sentCount=999;}
-	  messages.push(msg);
+ 	  if(item.tool_call_id){msg.tool_call_id=item.tool_call_id;msg._sentCount=999;}
+ 	  if(item.name){msg.name=item.name;if(!item.tool_call_id)msg._sentCount=999;}
+ 	  if(item.tool_calls)msg.tool_calls=item.tool_calls;
+  	  if(item._tokens!==undefined)msg._tokens=item._tokens;
+  	  if(item._injected)msg._injected=item._injected;
+ 	  messages.push(msg);
 	}
 
       }
     }
 
-    if(window._persistentMessages&&window._persistentMessages[currentConversationId]){
-      var _cached=window._persistentMessages[currentConversationId].slice();
-      messages=[{role:'system',content:systemPrompt}];
-      // 追加缓存历史（跳过可能的旧 system）
-      for(var _ci=(_cached.length>0&&_cached[0].role==='system')?1:0;_ci<_cached.length;_ci++){
-        messages.push(_cached[_ci]);
-      }
-    }
-      
+// ★ [已废弃] _persistentMessages 缓存覆盖 — 主循环直接从气泡构建
+    //    分支系统在 _forkAtForkPoint 中删除持久缓存，所以不会命中此分支。
+    //    主循环不删缓存，导致可能使用过期/损坏的缓存数据。
+    //    统一从气泡构建，确保一致性。
+    // ★ 消息序列校验：丢弃加载/缓存中损坏的压缩上下文
+    messages=_validateMessageSequence(messages);
+    // ★ Debug: 保存构建后的messages快照（校验后、压缩前）
+    try{require('fs').writeFileSync(process.cwd()+'/messages_dump_before_compress.json',JSON.stringify({time:Date.now(),count:messages.length,preTotal:(typeof _preTotal!=='undefined'?_preTotal:0),messages:messages.map(function(m){return {role:m.role,contentLen:(m.content||'').length,hasToolCalls:!!(m.tool_calls&&m.tool_calls.length),toolCallIds:m.tool_calls?m.tool_calls.map(function(t){return t.id+'/'+(t.function?t.function.name:'')}):null,isInjected:!!m._injected,tokens:m._tokens};})}));}catch(_){}
   }catch(e){debugLogger.warn('上下文构建异常: '+e.message);}
   // 长对话自动压缩（由压缩阈值滑条控制，与上下文条数无关）
   // ★ 预检：基于 API 返回的 _tokens（精确），回退到字符估算，叠加本轮注入开销
@@ -16558,7 +16610,7 @@ async function processUserMessage(userText,taskId){
     for (var _pi = 0; _pi < messages.length; _pi++) {
       var _pm = messages[_pi];
       // 优先使用 API 返回的精确 _tokens，无 _tokens 时用字符估算
-      _preTotal += (_pm._tokens || _estimateTokens((_pm.content || '') + (_pm.reasoning_content || '')));
+      _preTotal += (_pm._tokens!==undefined&&_pm._tokens!==null ? _pm._tokens : _estimateTokens((_pm.content||'')+(_pm.reasoning_content||'')));
     }
     // + 本轮注入消息估算（技能推荐 ~200 token）
     _preTotal += 200;
@@ -16589,61 +16641,20 @@ async function processUserMessage(userText,taskId){
           setTimeout(function () { if (_autoToast.parentNode) _autoToast.remove(); }, 300);
         }, 3000);
         
-        // ★ 保留所有原始消息，标记旧消息 token 过期，注入归档摘要
+        // ★ 直接丢弃旧消息，只保留压缩后的活跃上下文（跟分支系统一样）
         //   compressed 结构: [kept_msg_1, ..., kept_msg_n, archived_summary(_injected)]
-        var _archivedSummary = compressed[compressed.length - 1];
-        var _keptMsgCount = compressed.length - 1; // 保留的非system消息数（不含归档摘要）
-        var _expiredEnd = messages.length - 1 - _keptMsgCount; // 过期消息在原始数组中的结束索引
-        
-        // 标记旧消息 token 过期（_tokens = 0）
-        for (var _ei = 1; _ei <= _expiredEnd && _ei < messages.length; _ei++) {
-          messages[_ei]._tokens = 0;
-        }
-        
-        // ★ 构建新消息数组：system + 旧消息(_tokens=0) + 保留消息(清理版) + 归档摘要
-        var _newMessages = [messages[0]]; // system
-        // 旧消息（已标记过期）
-        for (var _ei2 = 1; _ei2 <= _expiredEnd && _ei2 < messages.length; _ei2++) {
-          _newMessages.push(messages[_ei2]);
-        }
-        // 保留消息使用压缩返回的清理版
-        for (var _ki = 0; _ki < _keptMsgCount; _ki++) {
+        var _newMessages = [messages[0]]; // system prompt
+        for (var _ki = 0; _ki < compressed.length; _ki++) {
           _newMessages.push(compressed[_ki]);
         }
-        // 注入归档摘要
-        if (_archivedSummary && _archivedSummary._injected) {
-          _newMessages.push(_archivedSummary);
-        }
-        
-        // 替换 messages（供给后续 API 调用）
         messages.length = 0;
         Array.prototype.push.apply(messages, _newMessages);
         
-        // ★ 同步 _persistentMessages 到 DOM data-tokens（仅同步可见气泡）
-        if (window._persistentMessages && window._persistentMessages[currentConversationId]) {
-          var _pmArr = window._persistentMessages[currentConversationId];
-          var _msgEls = document.getElementById('convMessages' + currentConversationId);
-          var _bubbles = _msgEls ? _msgEls.querySelectorAll('.message.user,.message.agent') : null;
-          var _domIdx = 0;
-          // 标记 _pmArr 中对应过期消息的 DOM data-tokens
-          for (var _ei3 = 1; _ei3 < _pmArr.length; _ei3++) {
-            var _isSkippable = (_pmArr[_ei3]._injected || _pmArr[_ei3].role === 'tool');
-            if (_ei3 <= _expiredEnd && !_isSkippable && _bubbles && _domIdx < _bubbles.length) {
-              var _cd = _bubbles[_domIdx].querySelector('.message-content');
-              if (_cd) _cd.setAttribute('data-tokens', '0');
-            }
-            if (!_isSkippable) _domIdx++;
-          }
-          // 保存完整消息列表（含过期标记）到 _persistentMessages
-          window._persistentMessages[currentConversationId] = messages.slice();
-        } else {
-          if(!window._persistentMessages)window._persistentMessages={};
-          window._persistentMessages[currentConversationId] = messages.slice();
-        }
-        
-        _updateTokenAccumulator(currentConversationId);
+
+        _updateTokenAccumulator(currentConversationId, null, messages);
         _saveTokenCounts();
         _updateToolbarTokenDisplay();
+        
       } else {
         if (_autoToast.parentNode) _autoToast.remove();
       }
@@ -16754,7 +16765,11 @@ async function processUserMessage(userText,taskId){
       }
 
       // 【核心修复】每一轮都传 tools，不再限制 round===0
-      // 这样 LLM 在收到工具结果后可以继续调用工具（如先 search 再 code_runner）
+      // ★ Debug dump: 保存 messages 概览
+      if(typeof window!=='undefined'){
+        window.__lastMessages=messages.map(function(m){return {role:m.role,tokens:m._tokens,contentLen:(m.content||'').length,tool_calls:!!m.tool_calls,tool_call_id:m.tool_call_id};});
+        try{require('fs').writeFileSync(process.cwd()+'/request_body_messages.json',JSON.stringify({time:Date.now(),messages:window.__lastMessages}));}catch(_){}
+      }
       var finishReason=await streamChatCompletion(messages, // 【修复】接收 finish_reason
         activeTools,
         async function(chunk){
@@ -17803,22 +17818,14 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
     currentTaskId=null;
     taskStartTime=null;
 
-    if(!window._persistentMessages)window._persistentMessages={};
-    window._persistentMessages[currentConversationId]=messages.filter(function(m){
-      if(m._injected)return false; // 注入消息不入持久缓存
-      var c=typeof m.content==='string'?m.content:'';
-      if(/^\[审查报告\]/.test(c))return false;
-      if(/^\[TODO\s*卡片\]/.test(c))return false;
-      return true;
-    }).slice();
-    // ★ 从刚刷新的 _persistentMessages 累加 _tokens（此时所有消息已有最新API精确标记）
-    _updateTokenAccumulator(currentConversationId);
+    // ★ 从当前消息数组累加 _tokens（此时所有消息已有最新API精确标记）
+    _updateTokenAccumulator(currentConversationId, null, messages);
     _updateToolbarTokenDisplay();
     _saveTokenCounts();
-    // ★ 同步 _persistentMessages 到 branch data（异步持久化，配合 beforeunload 增加 IndexedDB 落地概率）
+    // ★ 同步 messages 到 branch data（异步持久化，配合 beforeunload 增加 IndexedDB 落地概率）
     try{
       var _bd2=_getBranchData(currentConversationId);
-      var _items2=window._persistentMessages&&window._persistentMessages[currentConversationId];
+      var _items2=messages.filter(function(m){return true;});
       if(_bd2&&_bd2._branches&&_bd2._currentBranchId&&_items2&&_items2.length){
         _bd2._branches[_bd2._currentBranchId].items=_items2.slice();
         (async function(){
@@ -17917,9 +17924,17 @@ function _addToolBlockAfter(blockId,toggleId,toolName,resultContent,refEl){
 
 async function flowExecuteLoop(session, cs, taskId, messagesDiv, convId){
   convId = convId || currentConversationId;
-  // ★ 首次进入执行阶段：将对齐师的 system prompt 替换为监工 system prompt
-  if(session.supervisorMessages && session.supervisorMessages.length>0){
-    session.supervisorMessages[0].content = buildSupervisorSystemPrompt(session, null, convId);
+  // supervisorMessages 为空则初始化上下文（user 角色注入 todo 清单/工具列表/推荐）
+  if(session.supervisorMessages){
+    if(session.supervisorMessages.length===0){
+      session.supervisorMessages.push({
+        role:'user',
+        content:buildSupervisorSystemPrompt(session,null,convId)
+      });
+    }else{
+      // 更新已有消息内容（保持原角色不变，始终 user 注入）
+      session.supervisorMessages[0].content = buildSupervisorSystemPrompt(session, null, convId);
+    }
   }
 
   while(session.phase==='executing'&&session.active&&!session.delivered){
@@ -18616,8 +18631,8 @@ function _recalcStats(todos){
     else if(s==='failed')stats.failed++;
     else stats.todo++;
   }
-  todos.stats=stats;
-  if(!todos||!todos.active)return{ok:false,error:'无活跃清单，请先 todo create'};
+   if(!todos||!todos.active)return{ok:false,error:'无活跃清单，请先 todo create'};
+   todos.stats=stats;
 }
 
 function _detectCycle(items){
@@ -19036,10 +19051,6 @@ function handleMessageDelete(msgDiv) {
   if (!window.confirm('确定删除这条消息？')) return;
   if (msgDiv.parentNode) msgDiv.parentNode.removeChild(msgDiv);
   _saveBranchMessages(currentConversationId).catch(function(){});
-  // ★ 清除持久化消息缓存，强制下次发送从 IndexedDB 重建上下文，防止脏上下文
-  if (window._persistentMessages && window._persistentMessages[currentConversationId]) {
-    delete window._persistentMessages[currentConversationId];
-  }
   showToast('消息已删除','success');
 }
 
@@ -19641,10 +19652,6 @@ async function importAllData(jsonData){
       updateSendButton();                     // ★ 刷新发送按钮（API Key 可能已变）
       applySettingsToUI();                    // ★ 刷新设置面板
       renderFileManager();                    // ★ 刷新文件管理器
-      // 清除内存缓存，强制从导入数据重建
-      if(window._persistentMessages){
-        delete window._persistentMessages[currentConversationId];
-      }
       if(currentConversationId){
         await switchConversation(currentConversationId, true);
       }
@@ -19750,7 +19757,7 @@ async function resetSystem(){
     _recentFileBlobs={};
     _embedCache=new Map();
     _searchCache=new Map();
-    window._persistentMessages={};
+    // window._persistentMessages={};  // 已废弃
     conversationDB={entries:[]};
     errorHandler.errorLog=[];
     errorHandler.retryCounts={};
@@ -21138,10 +21145,6 @@ function initEventBindings(){
     var store=tx.objectStore('messages');
     store.put({id:currentConversationId,branches:bd._branches,currentBranchId:bd._currentBranchId,branchOrder:bd._branchOrder,updatedAt:Date.now()});
     await new Promise(function(res,rej){tx.oncomplete=res;tx.onerror=rej;});
-    // ★ [FIX] 分支切换上下文隔离：清除所有可能泄漏旧分支状态的缓存
-    if(window._persistentMessages && window._persistentMessages[currentConversationId]){
-      delete window._persistentMessages[currentConversationId];
-    }
     window._flowWakeupMessages = null;
     if(typeof shortTermMemory !== 'undefined' && typeof shortTermMemory.clear === 'function') shortTermMemory.clear();
     if(typeof _inlineCritiqueCache !== 'undefined'){
@@ -21175,10 +21178,6 @@ function initEventBindings(){
     bd._branches[curId].items=_collectBubbles(msgList);
     for(var bi=bubbles.length-1;bi>fp;bi--){
       if(bubbles[bi].parentNode)bubbles[bi].parentNode.removeChild(bubbles[bi]);
-    }
-    // ★ [FIX] 分支分叉上下文隔离：彻底清除所有可能泄漏旧分支状态的缓存
-    if(window._persistentMessages&&window._persistentMessages[currentConversationId]){
-      delete window._persistentMessages[currentConversationId];
     }
     window._flowWakeupMessages = null;
     if(typeof shortTermMemory !== 'undefined' && typeof shortTermMemory.clear === 'function') shortTermMemory.clear();
@@ -21772,13 +21771,13 @@ async function switchConversation(convId,forceSwitch){
       // ★ 从 branch items 恢复 _persistentMessages（含 _tokens）
       //   使新消息处理时能直接复用加载的 tokens，避免页面刷新后计数器清零
       if(branchItems&&branchItems.length){
-        if(!window._persistentMessages)window._persistentMessages={};
-        window._persistentMessages[convId]=branchItems.slice();
         // 重建 token 累计值（仅当 _loadTokenCounts 未加载时，避免覆盖 localStorage 恢复的正确值）
         if(!_convTokenAccumulator[convId]){
-          _updateTokenAccumulator(convId);
+          _updateTokenAccumulator(convId, null, branchItems);
         }
       }
+
+
       // ★ 加载该对话的 API 调用用量日志
       if(typeof _loadApiUsageLog==='function'){
         _loadApiUsageLog(convId);
