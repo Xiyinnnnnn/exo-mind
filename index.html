@@ -16581,7 +16581,7 @@ async function processUserMessage(userText,taskId){
   }
 
   var messagesDiv=getConvMessagesList(currentConversationId);
-  if(!messagesDiv)return;
+  if(!messagesDiv){isProcessing=false;cs.isProcessing=false;updateSendButton();return;}
 
   // 移除欢迎消息
   var welcomeEl=messagesDiv.querySelector('.welcome-message');
@@ -16771,10 +16771,11 @@ async function processUserMessage(userText,taskId){
 
   // 创建Agent消息容器
   var agentMsgDiv=addAgentMessageContainer(agentMessageId);
+  if(!agentMsgDiv){isProcessing=false;cs.isProcessing=false;updateSendButton();return;}
   var contentDiv=agentMsgDiv.querySelector('.message-content');
+  if(!contentDiv){isProcessing=false;cs.isProcessing=false;updateSendButton();return;}
 
   // 【修复】确保所有退出路径都重置isProcessing
-  var processingError=null;
   try{
     // 【重构】主对话循环（含工具调用）— 所有轮次均传递 tools，支持标准 multi-turn function calling
     // 活跃工具集在循环外计算一次，避免每轮重复构建
@@ -17864,8 +17865,7 @@ _mainToolCalls[_ri2].result = _rc.length > 5000 ? _rc.substring(0, 5000) + '…'
   finally{
     // 【多对话并行】重置当前对话的处理状态
     if(_streamTargetConvId===cs._origConvId)_streamTargetConvId=null;
-    // ★ cs.isProcessing 已在心流触发块中管理，此处不再重复置 false
-    if(!(flowSession()&&flowSession().active))isProcessing=false;
+    if(!(flowSession()&&flowSession().active)){var _targetCs=cs._origConvId?_ensureConvState(cs._origConvId):cs;if(_targetCs)_targetCs.isProcessing=false;}
     cs.stopRequested=false;
     // ★★★【BUGFIX】finally 块中安全清理，防止死引用导致暂停按钮失效
     if(cs.llmController){
@@ -22291,11 +22291,15 @@ processUserMessage=async function(userText,taskId){
     autoState.activeSkillIds=[];
     renderConversationList();
   }
-  var result=await _origProcessUserMessage(userText,taskId);
-  // 【多对话并行】完成时保存
-  var cs1=_ensureConvState(currentConversationId);
-  if(cs1){
-    isProcessing=false;
+  var result;
+  try{
+    result=await _origProcessUserMessage(userText,taskId);
+  }finally{
+    // 【多对话并行】完成时保存
+    var cs1=_ensureConvState(currentConversationId);
+    if(cs1){
+      isProcessing=false;
+    }
   }
   if(currentConversationId){
     setTimeout(function(){saveCurrentMessages();},800);
