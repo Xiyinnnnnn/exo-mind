@@ -9427,6 +9427,7 @@ function _buildLLMRequest(messages,tools,stream,source){
         debugLogger.warn(' 跨轮精炼: '+_tname+'('+(_cl2/1000).toFixed(0)+'K)→引导语句');
       }
     }
+    for(var __si=0;__si<cleanedMessages.length;__si++){delete cleanedMessages[__si]._sentCount;}
     _estMsgTotal=0;
     for(var _mii=0;_mii<cleanedMessages.length;_mii++){_estMsgTotal+=(cleanedMessages[_mii]._tokens||_estimateTokens(cleanedMessages[_mii].content||''));}
     // ★ 极端丢弃已移除：跨轮精炼已压缩大块工具结果，剩余超限由 API 自行截断
@@ -16679,40 +16680,13 @@ async function processUserMessage(userText,taskId){
         var item=recentItems[ri];
 	var role=item.role||((item.role==='agent'||item.role==='assistant')?'assistant':(item.role==='user'?'user':'assistant'));
 	var content=item.cleanContent||item.content||'';
-	// ★ 旧格式修复：assistant 内容含 ---tool: → 拆成 assistant(正文)+tool(结果)
-	// ★ 修复：tool_call_id 与 assistant.tool_calls 双向匹配，不再随机孤立
-	if(role==='assistant' && typeof content==='string' && content.indexOf('---tool:')>=0){
-	  var _splitIdx=content.indexOf('---tool:');
-	  var _assistantText=content.substring(0,_splitIdx).replace(/\n{4,}/g,'\n\n\n').trim();
-	  var _toolParts=content.substring(_splitIdx).split(/\n(?=---tool:)/);
-	  var _genCalls=[];
-	  var _genMsgs=[];
-	  for(var _tpi=0;_tpi<_toolParts.length;_tpi++){
-	    var _tp=_toolParts[_tpi].trim();
-	    if(!_tp)continue;
-	    var _toolName='';
-	    var _nm=_tp.match(/查看工具结果:\s*(\S+)/i);
-	    if(_nm)_toolName=_nm[1];
-	    var _cid='tc_migrated_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
-	    _genCalls.push({type:'function',id:_cid,function:{name:_toolName||'unknown',arguments:'{}'}});
- 	    _genMsgs.push({role:'tool',tool_call_id:_cid,name:_toolName||'unknown',content:_tp,_sentCount:999});
-	  }
-	  if(_assistantText){
-	    var _asstMsg={role:'assistant',content:_assistantText};
-	    if(_genCalls.length>0)_asstMsg.tool_calls=_genCalls;
-	    messages.push(_asstMsg);
-	  }
-	  for(var _tmi=0;_tmi<_genMsgs.length;_tmi++){messages.push(_genMsgs[_tmi]);}
-	
-	}else{
- 	  var msg={role:role,content:content};
- 	  if(item.tool_call_id){msg.tool_call_id=item.tool_call_id;msg._sentCount=999;}
- 	  if(item.name){msg.name=item.name;if(!item.tool_call_id)msg._sentCount=999;}
- 	  if(item.tool_calls)msg.tool_calls=item.tool_calls;
-  	  if(item._tokens!==undefined)msg._tokens=item._tokens;
-  	  if(item._injected)msg._injected=item._injected;
- 	  messages.push(msg);
-	}
+	var msg={role:role,content:content};
+	if(item.tool_call_id){msg.tool_call_id=item.tool_call_id;msg._sentCount=999;}
+	if(item.name){msg.name=item.name;if(!item.tool_call_id)msg._sentCount=999;}
+	if(item.tool_calls)msg.tool_calls=item.tool_calls;
+	if(item._tokens!==undefined)msg._tokens=item._tokens;
+	if(item._injected)msg._injected=item._injected;
+	messages.push(msg);
 
       }
     }
@@ -21912,15 +21886,6 @@ async function switchConversation(convId,forceSwitch){
         targetState._container.className='messages-list';
         targetState._container.style.cssText='display:flex;flex-direction:column;gap:16px';
       }
-      // ★ 旧格式自动迁移
-      if(msgs&&msgs.items&&!msgs.branches){
-        var legacyBid='b_'+Date.now();
-        var _oldItems=msgs.items;  // ★ 修复：保存原始 items 避免被 reassign 丢失
-        msgs={branches:{}};
-        msgs.branches[legacyBid]={items:_oldItems,parentId:null,forkPoint:0,label:'分支 1'};
-        msgs.currentBranchId=legacyBid;
-        msgs.branchOrder=[legacyBid];
-      }
       var bd=_getBranchData(convId);
       if(msgs&&msgs.branches){
         bd._branches=msgs.branches;
@@ -21929,10 +21894,6 @@ async function switchConversation(convId,forceSwitch){
       }
       var curBranch=bd._branches[bd._currentBranchId];
       var branchItems=(curBranch&&curBranch.items)||[];
-      // ★ 修复：system 消息缺少 _tokens 时从内容估算（兼容旧数据）
-      if(branchItems.length>0&&branchItems[0].role==='system'&&branchItems[0]._tokens===undefined){
-        branchItems[0]._tokens=_estimateTokens(branchItems[0].content||'');
-      }
 
       if(branchItems.length){
         // ★ 心流感知渲染：检测到包含 flow_mode 摘要的 assistant 消息后，
