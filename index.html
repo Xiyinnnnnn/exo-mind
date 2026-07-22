@@ -4300,11 +4300,11 @@ async function _fetchModelCtx(){
     if(_saved){_cachedModelCtx=parseInt(_saved,10)||_MODEL_CTX_FALLBACK;return _cachedModelCtx;}
   }catch(_e){}
   try{
-    var _base=(document.getElementById('base-url')||{}).value||'https://api.openai.com/v1';
-    var _model=(document.getElementById('model-select')||{}).value||'gpt-3.5-turbo';
+    var _base=(document.getElementById('settingBaseUrl')||{}).value||'https://api.deepseek.com';
+    var _model=(document.getElementById('settingModel')||{}).value||'deepseek-chat';
     var _baseModel=_model.replace(/-[\d]{4}$/,'');
     var _resp=await fetch(_base.replace(/\/+$/,'')+'/models/'+_baseModel,{
-      headers:{'Authorization':'Bearer '+((document.getElementById('api-key')||{}).value||'')}
+      headers:{'Authorization':'Bearer '+((document.getElementById('settingApiKey')||{}).value||'')}
     });
     if(_resp.ok){
       var _data=await _resp.json();
@@ -5989,6 +5989,27 @@ function applySettingsToUI(){
     }
   }
 }
+// ★ 模型变更时自动重新获取上下文窗口
+function _onModelChange(){
+  debugLogger.info('模型变更，重新获取上下文窗口...');
+  _cachedModelCtx=null;
+  try{localStorage.removeItem('_model_ctx');}catch(e){}
+  _MODEL_CTX=_MODEL_CTX_FALLBACK;
+  _fetchModelCtx().then(function(ctx){
+    _MODEL_CTX=ctx;
+    debugLogger.info('模型上下文窗口更新为: '+(ctx||'未知'));
+    // 同步更新压缩门槛滑条显示
+    var _aggSlider=document.getElementById('settingCompressionAggressiveness');
+    if(_aggSlider) _aggSlider.oninput && _aggSlider.oninput.call(_aggSlider);
+  });
+}
+// 用事件委托监听模型变更（兼容 input→select 替换）
+(function(){
+  var _drawer=document.getElementById('settingsDrawer');
+  if(_drawer) _drawer.addEventListener('change',function(e){
+    if(e.target&&e.target.id==='settingModel') _onModelChange();
+  });
+})();
 
 // —— 多Key输入UI辅助函数 ——
 function addTavilyKeyInput(value){
@@ -9442,9 +9463,7 @@ function _buildLLMRequest(messages,tools,stream,source){
     // ★ 消息序列校验：丢弃损坏的上下文（孤立tool、不完整tool_calls对），_tokens===0为向后兼容
     cleanedMessages=_validateMessageSequence(cleanedMessages);
     // ★ 多层兜底：精炼工具结果 → 仍超限则丢弃最旧消息（不含system[0]）
-    var _MODEL_MAX=1048565;
-    var _desiredMax=settings.max_tokens||384000;
-    var _safeMsgTokens=_MODEL_MAX-_desiredMax-200;
+    var _MODEL_MAX=_MODEL_CTX_FALLBACK;
     var _estMsgTotal=0;
     for(var _mi=0;_mi<cleanedMessages.length;_mi++){
       var _tok=cleanedMessages[_mi]._tokens;
@@ -9491,8 +9510,12 @@ function _buildLLMRequest(messages,tools,stream,source){
     for(var _mii=0;_mii<cleanedMessages.length;_mii++){_estMsgTotal+=(cleanedMessages[_mii]._tokens||_estimateTokens(cleanedMessages[_mii].content||''));}
     // ★ 极端丢弃已移除：跨轮精炼已压缩大块工具结果，剩余超限由 API 自行截断
     // ★ 孤立tool清理已由 _validateMessageSequence 统一处理（见第9284行）
-    // 【修复】有工具调用时自动翻倍；384K兜底，杜绝多轮工具调用中token耗尽被截断
-    var effectiveMaxTokens=settings.max_tokens||384000;
+    // ★ 自适应max_tokens：感知上下文使用量自动回退，同压缩阈值逻辑
+    //   上下文压力大时自动缩小max_tokens，总用量不超模型上限，防止API静默截断
+    var _ctxCap = typeof _MODEL_CTX !== 'undefined' ? _MODEL_CTX : _MODEL_MAX;
+    var _safeHeadroom = 1000;
+    var _availOutput = Math.max(16384, _ctxCap - _estMsgTotal - _safeHeadroom);
+    var effectiveMaxTokens = Math.min(settings.max_tokens || 384000, _availOutput);
     if(tools&&tools.length>0)effectiveMaxTokens=Math.max(effectiveMaxTokens,16384);
     var body={model:model,messages:cleanedMessages,max_tokens:effectiveMaxTokens,temperature:settings.temperature||0.6,stream:!!stream};
     if(stream){body.stream_options={include_usage:true};}
